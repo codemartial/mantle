@@ -4,45 +4,78 @@ struct EmptyStateView: View {
     let onOpen: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
+        ZStack {
+            StripedBackground()
 
-            // Iconograph -- a simple folder glyph in the accent colour.
-            Image(systemName: "folder")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(Theme.fgDim)
+            VStack(spacing: 14) {
+                dashedIcon
 
-            VStack(spacing: 6) {
-                Text("Open a folder of photos")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.fg)
-                Text("Metadater reads EXIF, IPTC and XMP from each image\nand writes your edits to a .xmp sidecar alongside the\noriginal -- RAW files are never modified.")
-                    .multilineTextAlignment(.center)
-                    .font(Typo.body)
-                    .foregroundStyle(Theme.fgDim)
-                    .lineSpacing(2)
-            }
+                VStack(spacing: 6) {
+                    Text("Point Metadater at a folder of images")
+                        .font(.system(size: 14 * 1.15, weight: .semibold))
+                        .foregroundStyle(Theme.fg)
 
-            HStack(spacing: 8) {
-                Button(action: onOpen) {
-                    Text("Choose Folder...")
-                        .font(Typo.bodyMid)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
+                    Text("Drag any folder onto the window, or use Cmd+O to choose one.\nMetadater reads EXIF, IPTC and XMP from each image and writes your\nedits to a .xmp sidecar alongside the original -- RAW files are never\nmodified.")
+                        .font(.system(size: 12 * 1.15))
+                        .foregroundStyle(Theme.fgDim)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2.5)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
-                .keyboardShortcut("o", modifiers: .command)
-            }
 
-            Text("or drag a folder onto the window")
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgFaint)
+                HStack(spacing: 8) {
+                    Button(action: onOpen) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 11 * 1.15, weight: .medium))
+                            Text("Choose folder...")
+                                .font(.system(size: 12 * 1.15, weight: .medium))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+                    .keyboardShortcut("o", modifiers: .command)
+
+                    Button(action: {}) {
+                        HStack(spacing: 4) {
+                            Text("Open recent")
+                                .font(.system(size: 12 * 1.15))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9 * 1.15, weight: .medium))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(true)
+                }
                 .padding(.top, 4)
-
-            Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.bgWindow)
+    }
+
+    private var dashedIcon: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .strokeBorder(
+                Theme.line2,
+                style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+            )
+            .frame(width: 64, height: 64)
+            .overlay(
+                ZStack {
+                    Image(systemName: "folder")
+                        .font(.system(size: 26 * 1.15, weight: .light))
+                        .foregroundStyle(Theme.fgDim)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13 * 1.15))
+                        .foregroundStyle(Theme.accent)
+                        .background(Theme.bgWindow.clipShape(Circle()))
+                        .offset(x: 11, y: 9)
+                }
+            )
     }
 }

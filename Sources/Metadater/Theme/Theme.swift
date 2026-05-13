@@ -8,14 +8,16 @@ import SwiftUI
 enum Theme {
 
     // Surfaces
-    static let bgDesktop   = oklch(0.14,  0.005, 250)
-    static let bgWindow    = oklch(0.20,  0.005, 250)
-    static let bgToolbar   = oklch(0.235, 0.005, 250)
-    static let bgPanel     = oklch(0.225, 0.005, 250)
-    static let bgElev      = oklch(0.27,  0.005, 250)
-    static let bgElevHi    = oklch(0.32,  0.005, 250)
-    static let bgInput     = oklch(0.17,  0.005, 250)
-    static let bgThumb     = oklch(0.24,  0.005, 250)
+    static let bgDesktop    = oklch(0.14,  0.005, 250)
+    static let bgWindow     = oklch(0.20,  0.005, 250)
+    static let bgToolbar    = oklch(0.235, 0.005, 250)
+    static let bgPanel      = oklch(0.225, 0.005, 250)
+    static let bgElev       = oklch(0.27,  0.005, 250)
+    static let bgElevHi     = oklch(0.32,  0.005, 250)
+    static let bgInput      = oklch(0.17,  0.005, 250)
+    static let bgThumb      = oklch(0.24,  0.005, 250)
+    static let bgStripeA    = oklch(0.16,  0.005, 250)
+    static let bgStripeB    = oklch(0.18,  0.005, 250)
 
     // Text
     static let fg          = oklch(0.96, 0.005, 250)
@@ -26,10 +28,13 @@ enum Theme {
     // Lines
     static let line1       = oklch(0.30, 0.005, 250)
     static let line2       = oklch(0.34, 0.005, 250)
+    static let lineSoft    = oklch(0.27, 0.005, 250, alpha: 0.70)
 
     // Accent + signal
     static let accent      = oklch(0.72, 0.13, 235)
     static let accentSoft  = oklch(0.72, 0.13, 235, alpha: 0.22)
+    static let accentEdge  = oklch(0.72, 0.13, 235, alpha: 0.55)
+    static let accentFg    = oklch(0.15, 0.02, 235)
     static let ok          = oklch(0.70, 0.13, 142)
     static let warn        = oklch(0.78, 0.14,  60)
     static let no          = oklch(0.65, 0.16,  28)

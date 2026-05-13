@@ -1,16 +1,22 @@
 import SwiftUI
 
-// SF Pro for MVP. Geist swap is deferred to a follow-up:
-// register Geist-Regular.otf, Geist-Medium.otf, Geist-Semibold.otf,
-// GeistMono-Regular.otf, GeistMono-Medium.otf via
-// CTFontManagerRegisterFontsForURL at launch and update the helpers below.
+// Single source of truth for font sizes. Bump `scale` to enlarge the
+// whole UI uniformly. Per-display sizing is task #12.
 
 enum Typo {
-    static let body      = Font.system(size: 12, weight: .regular)
-    static let bodyMid   = Font.system(size: 12, weight: .medium)
-    static let title     = Font.system(size: 12, weight: .semibold)
-    static let small     = Font.system(size: 11, weight: .regular)
-    static let label     = Font.system(size: 10, weight: .medium).smallCaps()
-    static let mono      = Font.system(size: 11, weight: .regular, design: .monospaced)
-    static let monoMid   = Font.system(size: 11, weight: .medium, design: .monospaced)
+
+    static let scale: CGFloat = 1.15
+
+    static func size(_ points: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: points * scale, weight: weight, design: design)
+    }
+
+    // Convenience presets matching the prototype's roles
+    static var body:    Font { size(12) }
+    static var bodyMid: Font { size(12, weight: .medium) }
+    static var title:   Font { size(12, weight: .semibold) }
+    static var small:   Font { size(11) }
+    static var label:   Font { size(10, weight: .medium).smallCaps() }
+    static var mono:    Font { size(11, design: .monospaced) }
+    static var monoMid: Font { size(11, weight: .medium, design: .monospaced) }
 }

@@ -1,12 +1,24 @@
 import Foundation
+import CoreGraphics
 
-// A row in the browser. Real population happens in step 3 (LibraryIndex).
-// For step 2 the library list is empty after a folder open; just placeholder.
-struct LibraryEntry: Identifiable, Hashable {
-    let id: String           // stable key -- the basename without extension
-    let basename: String     // e.g. "DSC_0421"
-    let displayURL: URL      // preferred file for preview (JPEG if paired with RAW)
-    let siblingURLs: [URL]   // all the original files this entry represents
-    let sidecarURL: URL?     // existing .xmp neighbor, if any
-    let format: String       // "JPEG" | "RAW" | "RAW + JPEG" | ...
+// A row in the browser. One entry per basename group: a lone JPEG, a lone
+// RAW, or a RAW+JPEG pair sharing a basename. The pair shares one sidecar.
+//
+// `displaySize` is the orientation-applied pixel size (so a portrait reads
+// as taller than it is wide). Used by ThumbnailCell to pick its aspect
+// ratio so portraits make the cell taller, panoramas make it wider, and
+// the column width stays constant.
+struct LibraryEntry: Identifiable, Hashable, Sendable {
+    let id: String
+    let basename: String
+    let displayURL: URL
+    let siblingURLs: [URL]
+    let sidecarURL: URL?
+    let format: String
+    let displaySize: CGSize
+
+    var aspectRatio: CGFloat {
+        guard displaySize.width > 0, displaySize.height > 0 else { return 1.5 }
+        return displaySize.width / displaySize.height
+    }
 }

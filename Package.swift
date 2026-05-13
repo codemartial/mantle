@@ -14,6 +14,9 @@ let package = Package(
                 "Resources/Info.plist",
                 "Resources/Metadater.entitlements",
             ],
+            resources: [
+                .copy("Resources/exiftool"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

@@ -6,19 +6,14 @@ struct RootView: View {
     var body: some View {
         VStack(spacing: 0) {
 
-            if state.folderURL == nil {
-                EmptyStateView(onOpen: openFolder)
-                    .frame(maxHeight: .infinity)
-            } else {
-                ThreePane()
-                    .frame(maxHeight: .infinity)
-            }
+            ThreePane()
+                .frame(maxHeight: .infinity)
 
             Rectangle()
                 .fill(Theme.line1)
                 .frame(height: 1)
 
-            StatusBar(state: state)
+            StatusBar()
                 .frame(height: 24)
                 .background(Theme.bgToolbar)
         }
@@ -30,139 +25,81 @@ struct RootView: View {
         }
         .navigationTitle(state.folderURL == nil ? "Metadater" : state.folderDisplayName)
     }
-
-    private func openFolder() {
-        FolderPicker.present { url in
-            state.openFolder(url)
-        }
-    }
 }
 
+// Browser stays at a fixed 252pt. Center pane and right pane share the
+// remaining width in the same 1.73:1 ratio the prototype uses at its 940pt
+// minimum window width -- so as the window scales up, both the preview
+// area and the metadata column grow together, instead of the preview
+// devouring all the extra space.
 private struct ThreePane: View {
     @Environment(AppState.self) private var state
 
+    private let browserWidth: CGFloat = 252
+    private let hairlineWidth: CGFloat = 1
+    // 252 / (436 + 252) = 0.366. Right pane gets this fraction of the
+    // non-browser width, with a 252pt floor at the minimum window width.
+    private let rightFraction: CGFloat = 0.366
+    private let rightMin: CGFloat = 252
+
     var body: some View {
-        HStack(spacing: 0) {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let nonBrowser = max(0, totalWidth - browserWidth - 2 * hairlineWidth)
+            let rightWidth = max(rightMin, nonBrowser * rightFraction)
+            let centerWidth = max(0, nonBrowser - rightWidth)
 
-            BrowserPanePlaceholder()
-                .frame(width: 252)
-                .background(Theme.bgPanel)
+            HStack(spacing: 0) {
 
-            hairline()
+                BrowserPane()
+                    .frame(width: browserWidth)
+                    .background(Theme.bgPanel)
 
-            CenterPanePlaceholder()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.bgWindow)
+                hairline()
 
-            hairline()
+                CenterPane()
+                    .frame(width: centerWidth)
 
-            MetadataPanePlaceholder()
-                .frame(width: 252)
-                .background(Theme.bgPanel)
+                hairline()
+
+                MetadataPane()
+                    .frame(width: rightWidth)
+                    .background(Theme.bgPanel)
+            }
+            .frame(width: totalWidth, height: geo.size.height)
         }
     }
 
     private func hairline() -> some View {
         Rectangle()
             .fill(Theme.line1)
-            .frame(width: 1)
+            .frame(width: hairlineWidth)
             .frame(maxHeight: .infinity)
     }
 }
 
-private struct BrowserPanePlaceholder: View {
+private struct CenterPane: View {
     @Environment(AppState.self) private var state
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Browser")
-                    .font(Typo.label)
-                    .foregroundStyle(Theme.fgDim)
-                Spacer()
-                Text("\(state.library.count) items")
-                    .font(Typo.small)
-                    .foregroundStyle(Theme.fgFaint)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            Spacer()
-            Text("(scan pending in step 3)")
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgFaint)
-                .frame(maxWidth: .infinity)
-            Spacer()
-        }
-    }
-}
 
-private struct CenterPanePlaceholder: View {
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
-            Text("Select an image")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Theme.fgMute)
-            Spacer()
-        }
-    }
-}
-
-private struct MetadataPanePlaceholder: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Metadata")
-                    .font(Typo.label)
-                    .foregroundStyle(Theme.fgDim)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            Spacer()
-            Text("--")
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgFaint)
-                .frame(maxWidth: .infinity)
-            Spacer()
-        }
-    }
-}
-
-struct StatusBar: View {
-    let state: AppState
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let folderURL = state.folderURL {
-                Text("\(state.library.count) items")
-                    .font(Typo.small)
-                    .foregroundStyle(Theme.fgDim)
-                Text("|")
-                    .foregroundStyle(Theme.fgFaint)
-                Text(folderURL.path)
-                    .font(Typo.mono)
-                    .foregroundStyle(Theme.fgDim)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            if state.folderURL == nil {
+                EmptyStateView(onOpen: openFolder)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Text("no folder open")
-                    .font(Typo.small)
-                    .foregroundStyle(Theme.fgFaint)
+                PreviewPane()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if state.selectedEntry != nil {
+                    CaptionBlock()
+                }
             }
-
-            Spacer()
-
-            Text(state.status.displayText)
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgDim)
-
-            Text("|")
-                .foregroundStyle(Theme.fgFaint)
-
-            Text("Metadater 0.1")
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgFaint)
         }
-        .padding(.horizontal, 12)
+    }
+
+    private func openFolder() {
+        FolderPicker.present { url in
+            state.openFolder(url)
+        }
     }
 }
