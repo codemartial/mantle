@@ -3,9 +3,17 @@
 .idea/
 .vscode/
 
-# Xcode (for when MVP build lands)
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode (if we add an xcodeproj later)
 build/
 DerivedData/
 *.xcuserdatad/
 xcuserdata/
 *.xcuserstate
+
+# Build output
+dist/
