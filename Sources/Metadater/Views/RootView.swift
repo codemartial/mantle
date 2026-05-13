@@ -1,43 +1,65 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(AppState.self) private var state
+
     var body: some View {
         VStack(spacing: 0) {
 
-            HStack(spacing: 0) {
-
-                // Left pane: browser
-                LeftPanePlaceholder()
-                    .frame(width: 252)
-                    .background(Theme.bgPanel)
-
-                hairline()
-
-                // Center pane: preview + caption editor
-                CenterPanePlaceholder()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.bgWindow)
-
-                hairline()
-
-                // Right pane: metadata
-                RightPanePlaceholder()
-                    .frame(width: 252)
-                    .background(Theme.bgPanel)
+            if state.folderURL == nil {
+                EmptyStateView(onOpen: openFolder)
+                    .frame(maxHeight: .infinity)
+            } else {
+                ThreePane()
+                    .frame(maxHeight: .infinity)
             }
-            .frame(maxHeight: .infinity)
 
             Rectangle()
                 .fill(Theme.line1)
                 .frame(height: 1)
 
-            StatusBarPlaceholder()
+            StatusBar(state: state)
                 .frame(height: 24)
                 .background(Theme.bgToolbar)
         }
         .frame(minWidth: 940, minHeight: 500)
         .background(Theme.bgWindow)
         .preferredColorScheme(.dark)
+        .acceptingFolderDrop { url in
+            state.openFolder(url)
+        }
+        .navigationTitle(state.folderURL == nil ? "Metadater" : state.folderDisplayName)
+    }
+
+    private func openFolder() {
+        FolderPicker.present { url in
+            state.openFolder(url)
+        }
+    }
+}
+
+private struct ThreePane: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        HStack(spacing: 0) {
+
+            BrowserPanePlaceholder()
+                .frame(width: 252)
+                .background(Theme.bgPanel)
+
+            hairline()
+
+            CenterPanePlaceholder()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.bgWindow)
+
+            hairline()
+
+            MetadataPanePlaceholder()
+                .frame(width: 252)
+                .background(Theme.bgPanel)
+        }
     }
 
     private func hairline() -> some View {
@@ -48,8 +70,8 @@ struct RootView: View {
     }
 }
 
-// Placeholders for step 1 -- replaced by real views in steps 3 / 4 / 5 / 7.
-private struct LeftPanePlaceholder: View {
+private struct BrowserPanePlaceholder: View {
+    @Environment(AppState.self) private var state
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -57,11 +79,14 @@ private struct LeftPanePlaceholder: View {
                     .font(Typo.label)
                     .foregroundStyle(Theme.fgDim)
                 Spacer()
+                Text("\(state.library.count) items")
+                    .font(Typo.small)
+                    .foregroundStyle(Theme.fgFaint)
             }
             .padding(.horizontal, 12)
             .frame(height: 28)
             Spacer()
-            Text("(no folder open)")
+            Text("(scan pending in step 3)")
                 .font(Typo.small)
                 .foregroundStyle(Theme.fgFaint)
                 .frame(maxWidth: .infinity)
@@ -74,19 +99,15 @@ private struct CenterPanePlaceholder: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
-            Text("Metadater")
-                .font(.system(size: 28, weight: .semibold))
+            Text("Select an image")
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.fgMute)
-            Text("Open a folder to begin")
-                .font(Typo.body)
-                .foregroundStyle(Theme.fgFaint)
-                .padding(.top, 4)
             Spacer()
         }
     }
 }
 
-private struct RightPanePlaceholder: View {
+private struct MetadataPanePlaceholder: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -107,17 +128,37 @@ private struct RightPanePlaceholder: View {
     }
 }
 
-private struct StatusBarPlaceholder: View {
+struct StatusBar: View {
+    let state: AppState
+
     var body: some View {
         HStack(spacing: 12) {
-            Text("0 items")
+            if let folderURL = state.folderURL {
+                Text("\(state.library.count) items")
+                    .font(Typo.small)
+                    .foregroundStyle(Theme.fgDim)
+                Text("|")
+                    .foregroundStyle(Theme.fgFaint)
+                Text(folderURL.path)
+                    .font(Typo.mono)
+                    .foregroundStyle(Theme.fgDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("no folder open")
+                    .font(Typo.small)
+                    .foregroundStyle(Theme.fgFaint)
+            }
+
+            Spacer()
+
+            Text(state.status.displayText)
                 .font(Typo.small)
                 .foregroundStyle(Theme.fgDim)
-            Spacer()
-            Text("All changes saved")
-                .font(Typo.small)
-                .foregroundStyle(Theme.fgDim)
-            Spacer()
+
+            Text("|")
+                .foregroundStyle(Theme.fgFaint)
+
             Text("Metadater 0.1")
                 .font(Typo.small)
                 .foregroundStyle(Theme.fgFaint)

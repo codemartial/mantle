@@ -1,0 +1,39 @@
+import SwiftUI
+import AppKit
+
+// Folder picker via NSOpenPanel -- more native than SwiftUI's fileImporter,
+// matches what photo apps on macOS use.
+@MainActor
+enum FolderPicker {
+    static func present(onPick: @escaping (URL) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open"
+        panel.message = "Choose a folder of photos."
+        panel.title = "Open Folder"
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                onPick(url)
+            }
+        }
+    }
+}
+
+struct AppCommands: Commands {
+    let state: AppState
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Open Folder...") {
+                FolderPicker.present { url in
+                    state.openFolder(url)
+                }
+            }
+            .keyboardShortcut("o", modifiers: .command)
+        }
+    }
+}
