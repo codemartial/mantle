@@ -1,0 +1,11 @@
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Xcode (for when MVP build lands)
+build/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+*.xcuserstate
