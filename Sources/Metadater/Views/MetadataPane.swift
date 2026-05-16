@@ -18,7 +18,7 @@ struct MetadataPane: View {
                         ExifReadOnlyList(title: "Camera", items: cameraItems)
                         sectionDivider()
 
-                        ExifReadOnlyList(title: "Captured", items: capturedItems)
+                        capturedSection
                         sectionDivider()
 
                         ExifReadOnlyList(title: "File", items: fileItems)
@@ -27,7 +27,7 @@ struct MetadataPane: View {
                         locationSection
                         sectionDivider()
 
-                        KeywordChips(keywords: record?.keywords ?? [])
+                        KeywordChips()
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 14)
@@ -75,19 +75,10 @@ struct MetadataPane: View {
         ]
     }
 
-    private var capturedItems: [(String, String)] {
-        [
-            ("Date", formatDate(record?.captureDate, timezone: record?.timezone)),
-            ("TZ",   tzLabel(record?.timezone)),
-        ]
-    }
-
-    private func tzLabel(_ rule: TZRule?) -> String {
-        guard let rule else { return "" }
-        switch rule {
-        case .unknown:                  return ""
-        case .auto:                     return "Auto - from GPS"
-        case .fixed(_, let label):      return label
+    private var capturedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("Captured")
+            DateEditor()
         }
     }
 
@@ -102,6 +93,12 @@ struct MetadataPane: View {
 
     // MARK: - Location
 
+    // Map aspect = original 228w x 110h design dimensions. Holding this
+    // ratio constant means the map widens with the pane and grows
+    // proportionally taller, instead of staying 110pt high and stretching
+    // into a thin landscape strip on wider windows.
+    private let mapAspectRatio: CGFloat = 228.0 / 110.0
+
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader("Location") {
@@ -113,14 +110,10 @@ struct MetadataPane: View {
             // Map placeholder: dark rectangle with subtle gradient and a pin
             // dot for design preview. Real MapKit comes in a polish pass.
             mapPlaceholder
+                .aspectRatio(mapAspectRatio, contentMode: .fit)
 
-            // Lat / Lon cells
-            HStack(spacing: 6) {
-                geoCell(label: "LAT", value: formatCoord(record?.latitude), hemiPositive: "N", hemiNegative: "S")
-                geoCell(label: "LON", value: formatCoord(record?.longitude), hemiPositive: "E", hemiNegative: "W")
-            }
+            GeoCells()
 
-            // Place + altitude line
             placeLine
         }
     }
@@ -152,45 +145,11 @@ struct MetadataPane: View {
                 }
             }
         }
-        .frame(height: 110)
         .overlay(
             RoundedRectangle(cornerRadius: 5)
                 .strokeBorder(Theme.line1, lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 5))
-    }
-
-    private func geoCell(label: String, value: String, hemiPositive: String, hemiNegative: String) -> some View {
-        HStack(spacing: 0) {
-            Text(value.isEmpty ? "--" : value)
-                .font(.system(size: 11 * 1.15, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(value.isEmpty ? Theme.fgFaint : Theme.fg)
-                .padding(.leading, 7)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(1)
-
-            Text(hemisphere(for: value, positive: hemiPositive, negative: hemiNegative))
-                .font(.system(size: 11 * 1.15, design: .monospaced))
-                .foregroundStyle(Theme.fgDim)
-                .frame(width: 22)
-                .frame(maxHeight: .infinity)
-                .background(Theme.bgStripeA)
-                .overlay(
-                    Rectangle()
-                        .fill(Theme.line1)
-                        .frame(width: 0.5),
-                    alignment: .leading
-                )
-        }
-        .frame(height: 24)
-        .background(Theme.bgInput)
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Theme.line1, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     private var placeLine: some View {
@@ -225,34 +184,9 @@ struct MetadataPane: View {
             .frame(height: 1)
     }
 
-    private func formatDate(_ date: Date?, timezone: TZRule?) -> String {
-        guard let date else { return "" }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "yyyy / MM / dd  HH:mm:ss"
-        df.timeZone = displayTimeZone(timezone)
-        return df.string(from: date)
-    }
-
-    private func displayTimeZone(_ rule: TZRule?) -> TimeZone {
-        if let rule, case .fixed(let mins, _) = rule {
-            return TimeZone(secondsFromGMT: mins * 60) ?? TimeZone(identifier: "UTC")!
-        }
-        return TimeZone(identifier: "UTC")!
-    }
-
     private func dimensions(_ dim: CGSize) -> String {
         guard dim.width > 0, dim.height > 0 else { return "" }
         return "\(Int(dim.width)) x \(Int(dim.height))"
     }
 
-    private func formatCoord(_ c: Double?) -> String {
-        guard let c else { return "" }
-        return String(format: "%.4f", abs(c))
-    }
-
-    private func hemisphere(for value: String, positive: String, negative: String) -> String {
-        guard !value.isEmpty else { return "--" }
-        return value.first == "-" ? negative : positive
-    }
 }

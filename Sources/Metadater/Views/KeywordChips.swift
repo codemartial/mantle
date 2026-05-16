@@ -1,44 +1,70 @@
 import SwiftUI
 
-// Read-only chip list for the design pass. Editable input + commit
-// behaviour wires up in the editable-bindings step.
+// Chip list with an inline draft input. Comma or Enter commits. Backspace
+// on an empty draft removes the last chip. Each chip carries an X to remove.
+// Design pass: local @State seeded from EditStore on selection change.
+// Lowercases + de-dupes on commit, matching app.jsx KeywordChips.
 
 struct KeywordChips: View {
-    let keywords: [String]
-    var placeholder: String = "Add keyword..."
+    @Environment(AppState.self) private var state
+
+    @State private var keywords: [String] = []
+    @State private var draft: String = ""
+    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader("Keywords")
+            SectionHeader("Keywords") {
+                Text(String(keywords.count))
+                    .font(.system(size: 10 * 1.15, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.accent)
+            }
 
             FlowLayout(spacing: 4) {
-                ForEach(Array(keywords.enumerated()), id: \.offset) { _, kw in
-                    chip(kw)
+                ForEach(Array(keywords.enumerated()), id: \.offset) { index, kw in
+                    chip(kw, at: index)
                 }
-                placeholderChip
+                draftInput
             }
             .padding(5)
             .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
             .background(Theme.bgInput)
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(Theme.line1, lineWidth: 0.5)
+                    .strokeBorder(inputFocused ? Theme.accentEdge : Theme.line1,
+                                  lineWidth: inputFocused ? 1 : 0.5)
             )
             .clipShape(RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+            .onTapGesture { inputFocused = true }
         }
+        .onAppear { seedFromRecord() }
+        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
     }
 
+    // MARK: - Chip
+
     @ViewBuilder
-    private func chip(_ text: String) -> some View {
-        HStack(spacing: 2) {
+    private func chip(_ text: String, at index: Int) -> some View {
+        HStack(spacing: 3) {
             Circle()
                 .fill(Theme.accent)
-                .frame(width: 6, height: 6)
-                .padding(.leading, 5)
+                .frame(width: 5, height: 5)
+                .padding(.leading, 6)
             Text(text)
                 .font(.system(size: 11 * 1.15))
                 .foregroundStyle(Theme.fg)
-                .padding(.trailing, 6)
+            Button {
+                keywords.remove(at: index)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8 * 1.15, weight: .medium))
+                    .foregroundStyle(Theme.fgDim)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .frame(height: 18)
         .background(Theme.chipBg)
@@ -49,12 +75,47 @@ struct KeywordChips: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    private var placeholderChip: some View {
-        Text(placeholder)
+    // MARK: - Draft input
+
+    private var draftInput: some View {
+        TextField(keywords.isEmpty ? "Type a keyword, press , to add" : "Add...",
+                  text: $draft)
+            .textFieldStyle(.plain)
+            .focused($inputFocused)
             .font(.system(size: 11 * 1.15))
-            .foregroundStyle(Theme.fgFaint)
-            .padding(.horizontal, 6)
-            .frame(height: 18)
+            .foregroundStyle(Theme.fg)
+            .frame(minWidth: 80, idealWidth: 120, maxWidth: .infinity, minHeight: 18)
+            .padding(.horizontal, 4)
+            .onSubmit { commit(draft) }
+            .onChange(of: draft) { _, newValue in
+                if newValue.contains(",") { commit(newValue) }
+            }
+            .onKeyPress(.delete) {
+                if draft.isEmpty, !keywords.isEmpty {
+                    keywords.removeLast()
+                    return .handled
+                }
+                return .ignored
+            }
+    }
+
+    // MARK: - Commit / seed
+
+    private func commit(_ raw: String) {
+        let parts = raw
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        guard !parts.isEmpty else { draft = ""; return }
+        for part in parts where !keywords.contains(part) {
+            keywords.append(part)
+        }
+        draft = ""
+    }
+
+    private func seedFromRecord() {
+        keywords = state.selectedRecord?.keywords ?? []
+        draft = ""
     }
 }
 

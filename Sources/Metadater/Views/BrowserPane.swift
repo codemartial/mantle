@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BrowserPane: View {
     @Environment(AppState.self) private var state
+    @Binding var mode: BrowserMode
 
     // Density-m default per the prototype: 2 columns, 8px gap.
     private let columns = [
@@ -25,7 +26,10 @@ struct BrowserPane: View {
             } else if state.library.isEmpty && !state.isScanning {
                 placeholder("No images in this folder")
             } else {
-                grid
+                switch mode {
+                case .grid: gridBody
+                case .list: listBody
+                }
             }
         }
     }
@@ -65,7 +69,9 @@ struct BrowserPane: View {
         return "\(state.library.count)"
     }
 
-    private var grid: some View {
+    // MARK: - Grid
+
+    private var gridBody: some View {
         ScrollView {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                 ForEach(state.library) { entry in
@@ -83,6 +89,27 @@ struct BrowserPane: View {
         }
     }
 
+    // MARK: - List
+
+    private var listBody: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                ForEach(state.library) { entry in
+                    ListRow(
+                        entry: entry,
+                        isSelected: state.selectedID == entry.id,
+                        cache: state.thumbs
+                    )
+                    .onTapGesture {
+                        state.select(entry.id)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+        }
+    }
+
     private func placeholder(_ text: String) -> some View {
         VStack {
             Spacer()
@@ -92,5 +119,76 @@ struct BrowserPane: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// One row in the list-mode browser. Layout matches .list-row in styles.css:
+//   grid-template-columns: 36px 1fr auto
+// Thumb + (filename / dimensions) + format badge.
+private struct ListRow: View {
+    let entry: LibraryEntry
+    let isSelected: Bool
+    let cache: ThumbnailCache
+
+    @State private var image: NSImage?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            thumb
+                .frame(width: 36, height: 24)
+                .background(Theme.bgThumb)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.basename)
+                    .font(.system(size: 11.5 * 1.15))
+                    .foregroundStyle(Theme.fg)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(dimensions)
+                    .font(.system(size: 10.5 * 1.15, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.fgFaint)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(entry.format)
+                .font(.system(size: 10.5 * 1.15, design: .monospaced))
+                .foregroundStyle(Theme.fgFaint)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(isSelected ? Theme.accentSoft : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .contentShape(Rectangle())
+        .task(id: entry.displayURL) {
+            let loaded = await cache.requestThumbnail(for: entry.displayURL)
+            if !Task.isCancelled { image = loaded }
+        }
+    }
+
+    @ViewBuilder
+    private var thumb: some View {
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFill()
+        } else {
+            Image(systemName: "photo")
+                .font(.system(size: 11 * 1.15))
+                .foregroundStyle(Theme.fgFaint)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var dimensions: String {
+        let w = Int(entry.displaySize.width)
+        let h = Int(entry.displaySize.height)
+        guard w > 0, h > 0 else { return "--" }
+        return "\(w) x \(h)"
     }
 }

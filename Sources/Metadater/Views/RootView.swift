@@ -2,11 +2,14 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var state
+    @State private var browserMode: BrowserMode = .grid
 
     var body: some View {
         VStack(spacing: 0) {
 
-            ThreePane()
+            Titlebar(browserMode: $browserMode)
+
+            ThreePane(browserMode: $browserMode)
                 .frame(maxHeight: .infinity)
 
             Rectangle()
@@ -20,10 +23,15 @@ struct RootView: View {
         .frame(minWidth: 940, minHeight: 500)
         .background(Theme.bgWindow)
         .preferredColorScheme(.dark)
+        // With .windowStyle(.hiddenTitleBar) the window's title bar is
+        // gone, but SwiftUI still treats the top of the window as a
+        // safe-area inset and pushes content 28pt down. Ignoring the
+        // top edge lets the custom Titlebar fill from y=0, so the
+        // traffic-light buttons float inside its 44pt strip.
+        .ignoresSafeArea(edges: .top)
         .acceptingFolderDrop { url in
             state.openFolder(url)
         }
-        .navigationTitle(state.folderURL == nil ? "Metadater" : state.folderDisplayName)
     }
 }
 
@@ -34,6 +42,7 @@ struct RootView: View {
 // devouring all the extra space.
 private struct ThreePane: View {
     @Environment(AppState.self) private var state
+    @Binding var browserMode: BrowserMode
 
     private let browserWidth: CGFloat = 252
     private let hairlineWidth: CGFloat = 1
@@ -51,7 +60,7 @@ private struct ThreePane: View {
 
             HStack(spacing: 0) {
 
-                BrowserPane()
+                BrowserPane(mode: $browserMode)
                     .frame(width: browserWidth)
                     .background(Theme.bgPanel)
 

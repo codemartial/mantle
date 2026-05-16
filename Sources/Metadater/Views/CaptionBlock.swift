@@ -1,31 +1,41 @@
 import SwiftUI
 
 // Headline + caption editors anchored below the preview in the center pane.
-// Design pass: read-only display from the EditStore. Editable bindings + a
-// dirty set are wired up after the design is approved.
+// Labels sit ABOVE their inputs (not beside them, as the JSX did) so the
+// input fields can use the full center-pane width -- the Swift app's left
+// and right columns are wider than the JSX prototype's, which left only a
+// narrow strip for the inputs when the labels lived in a side column.
+// Counters stay on the label row, right-aligned.
 
 struct CaptionBlock: View {
     @Environment(AppState.self) private var state
 
-    private let labelWidth: CGFloat = 70
+    @State private var headline: String = ""
+    @State private var caption: String = ""
+    @FocusState private var focus: Field?
+
+    private enum Field { case headline, caption }
+
+    private let headlineWarnAt: Int = 36
+    private let headlineOverAt: Int = 40
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 10) {
 
-            // HEADLINE row
-            HStack(alignment: .center, spacing: 10) {
-                rowLabel("Headline")
+            VStack(alignment: .leading, spacing: 4) {
+                labelRow("Headline",
+                         count: headline.count,
+                         warnAt: headlineWarnAt,
+                         overAt: headlineOverAt)
                 headlineInput
-                rowCounter(headlineCounter)
             }
 
-            // CAPTION row
-            HStack(alignment: .top, spacing: 10) {
-                rowLabel("Caption")
-                    .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 4) {
+                labelRow("Caption",
+                         count: caption.count,
+                         warnAt: nil,
+                         overAt: nil)
                 captionInput
-                rowCounter(captionCounter)
-                    .padding(.top, 6)
             }
         }
         .padding(.horizontal, 12)
@@ -37,100 +47,80 @@ struct CaptionBlock: View {
                 .frame(height: 1),
             alignment: .top
         )
+        .onAppear { seedFromRecord() }
+        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
     }
 
-    // MARK: - Inputs (read-only for now)
+    // MARK: - Inputs
 
     private var headlineInput: some View {
-        HStack(spacing: 0) {
-            Text(headlineText)
-                .font(.system(size: 11 * 1.15))
-                .foregroundStyle(headlineForeground)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-        .background(Theme.bgInput)
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Theme.line1, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        TextField("", text: $headline)
+            .textFieldStyle(.plain)
+            .focused($focus, equals: .headline)
+            .font(.system(size: 11 * 1.15))
+            .foregroundStyle(Theme.fg)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            .background(Theme.bgInput)
+            .overlay(focusFrame(active: focus == .headline))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
     private var captionInput: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Text(captionText)
-                .font(.system(size: 11 * 1.15))
-                .foregroundStyle(captionForeground)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-            Spacer(minLength: 0)
+        TextEditor(text: $caption)
+            .focused($focus, equals: .caption)
+            .font(.system(size: 11 * 1.15))
+            .foregroundStyle(Theme.fgMute)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
+            .background(Theme.bgInput)
+            .overlay(focusFrame(active: focus == .caption))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+    }
+
+    private func focusFrame(active: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 5)
+            .strokeBorder(active ? Theme.accentEdge : Theme.line1,
+                          lineWidth: active ? 1 : 0.5)
+    }
+
+    // MARK: - Seeding from store
+
+    private func seedFromRecord() {
+        let r = state.selectedRecord
+        headline = r?.headline ?? ""
+        caption = r?.caption ?? ""
+    }
+
+    // MARK: - Label + counter row
+
+    private func labelRow(_ text: String, count: Int, warnAt: Int?, overAt: Int?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(text)
+                .font(.system(size: 10 * 1.15, weight: .semibold))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(Theme.fgDim)
+            Spacer(minLength: 6)
+            counterText(count, warnAt: warnAt, overAt: overAt)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-        .background(Theme.bgInput)
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Theme.line1, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
-    // MARK: - Text + counters
-
-    private var headlineText: String {
-        if let r = state.selectedRecord, !r.headline.isEmpty { return r.headline }
-        return "(no headline)"
-    }
-
-    private var headlineForeground: Color {
-        guard let r = state.selectedRecord, !r.headline.isEmpty else { return Theme.fgFaint }
-        return Theme.fg
-    }
-
-    private var captionText: String {
-        if let r = state.selectedRecord, !r.caption.isEmpty { return r.caption }
-        return "(no caption)"
-    }
-
-    private var captionForeground: Color {
-        guard let r = state.selectedRecord, !r.caption.isEmpty else { return Theme.fgFaint }
-        return Theme.fgMute
-    }
-
-    private var headlineCounter: String {
-        // String.count returns grapheme cluster count -- what users perceive
-        // as visible glyphs (a single emoji or accented letter counts as one).
-        String(state.selectedRecord?.headline.count ?? 0)
-    }
-
-    private var captionCounter: String {
-        String(state.selectedRecord?.caption.count ?? 0)
-    }
-
-    // MARK: - Row helpers
-
-    private func rowLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10 * 1.15, weight: .semibold))
-            .tracking(0.8)
-            .textCase(.uppercase)
-            .foregroundStyle(Theme.fgDim)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(width: labelWidth, alignment: .leading)
-    }
-
-    private func rowCounter(_ text: String) -> some View {
-        Text(text)
+    // String.count returns grapheme cluster count -- what a user perceives
+    // as one visible glyph. A single emoji or accented letter counts once.
+    private func counterText(_ count: Int, warnAt: Int?, overAt: Int?) -> some View {
+        let color: Color = {
+            if let overAt, count > overAt { return Theme.no }
+            if let warnAt, count >= warnAt { return Theme.warn }
+            return Theme.fgFaint
+        }()
+        return Text(String(count))
             .font(.system(size: 10 * 1.15, design: .monospaced))
             .monospacedDigit()
-            .foregroundStyle(Theme.fgFaint)
-            .frame(minWidth: 26, alignment: .trailing)
+            .foregroundStyle(color)
     }
 }
