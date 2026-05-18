@@ -11,26 +11,28 @@ private let log = Logger(subsystem: "dev.metadater", category: "writer")
 
 enum ExifToolWriter {
 
-    enum WriteError: Error {
-        case exiftoolNotFound
-        case processFailed(status: Int32, stderr: String)
+    struct WriteResult {
+        let sidecar: URL
+        let command: String        // shell-escaped, copy-pasteable
+        let duration: TimeInterval
     }
 
-    // Returns the sidecar URL that received the write (so AppState can
-    // adopt it onto the LibraryEntry if it was newly created).
-    static func write(record: ImageRecord, fields: Set<EditableField>) throws -> URL {
+    enum WriteError: Error {
+        case exiftoolNotFound
+        case processFailed(status: Int32, stderr: String, command: String, duration: TimeInterval)
+    }
+
+    static func write(record: ImageRecord, fields: Set<EditableField>) -> Result<WriteResult, WriteError> {
+        let sidecar = sidecarPath(for: record.file)
+
         guard !fields.isEmpty else {
-            // Nothing dirty; nothing to do. Return the would-be path for
-            // bookkeeping symmetry, but skip the process entirely.
-            return sidecarPath(for: record.file)
+            return .success(WriteResult(sidecar: sidecar, command: "", duration: 0))
         }
 
         guard let exiftool = ExifToolOneShot.exiftoolBinaryURL(),
               let lib      = ExifToolOneShot.exiftoolLibURL() else {
-            throw WriteError.exiftoolNotFound
+            return .failure(.exiftoolNotFound)
         }
-
-        let sidecar = sidecarPath(for: record.file)
 
         var args: [String] = [exiftool.path]
         args += ["-overwrite_original", "-charset", "utf8", "-codedcharacterset=UTF8"]
@@ -56,6 +58,9 @@ enum ExifToolWriter {
             args += ["-o", sidecar.path]
         }
 
+        let command = displayCommand(args)
+        let start = Date()
+
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         proc.arguments = args
@@ -74,21 +79,53 @@ enum ExifToolWriter {
         do {
             try proc.run()
         } catch {
-            throw WriteError.processFailed(status: -1, stderr: error.localizedDescription)
+            let dur = Date().timeIntervalSince(start)
+            return .failure(.processFailed(status: -1,
+                                           stderr: error.localizedDescription,
+                                           command: command,
+                                           duration: dur))
         }
 
         _ = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
         let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()
+        let dur = Date().timeIntervalSince(start)
 
         guard proc.terminationStatus == 0 else {
             let msg = String(data: errData, encoding: .utf8) ?? "exit \(proc.terminationStatus)"
             log.error("exiftool write failed: \(msg, privacy: .public)")
-            throw WriteError.processFailed(status: proc.terminationStatus, stderr: msg)
+            return .failure(.processFailed(status: proc.terminationStatus,
+                                           stderr: msg,
+                                           command: command,
+                                           duration: dur))
         }
 
         log.debug("wrote \(fields.count) field(s) to \(sidecar.lastPathComponent, privacy: .public)")
-        return sidecar
+        return .success(WriteResult(sidecar: sidecar, command: command, duration: dur))
+    }
+
+    // First arg is the bundled exiftool.pl path; replace with the literal
+    // "exiftool" so logged lines stay short and copy-paste into a terminal
+    // assuming exiftool is on the path.
+    private static func displayCommand(_ args: [String]) -> String {
+        var parts: [String] = ["exiftool"]
+        for arg in args.dropFirst() {
+            parts.append(shellEscape(arg))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private static func shellEscape(_ s: String) -> String {
+        if s.isEmpty { return "''" }
+        let safe = CharacterSet(charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+=:,./-")
+        if s.unicodeScalars.allSatisfy({ safe.contains($0) }) {
+            return s
+        }
+        // Single-quote, escape any embedded single quotes by closing,
+        // adding an escaped quote, and reopening.
+        let escaped = s.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
     }
 
     static func sidecarPath(for image: URL) -> URL {
@@ -134,34 +171,22 @@ enum ExifToolWriter {
         return out
     }
 
+    // XMP has no standalone offset tag (OffsetTimeOriginal is EXIF-only).
+    // The offset rides inside the ISO 8601 string on XMP-photoshop:
+    // DateCreated, so whether date, tz, or both are dirty the write looks
+    // the same: format the current date in the current tz and emit one
+    // tag.
     private static func dateAndTimeArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {
-        let dateDirty = fields.contains(.captureDate)
-        let tzDirty   = fields.contains(.timezone)
-        guard dateDirty || tzDirty else { return [] }
+        guard fields.contains(.captureDate) || fields.contains(.timezone) else { return [] }
 
+        guard let date = record.captureDate else {
+            return ["-XMP-photoshop:DateCreated="]
+        }
         let offsetMinutes: Int = {
             if case .fixed(let mins, _) = record.timezone { return mins }
             return 0
         }()
-        let offsetStr = formatOffset(offsetMinutes)
-
-        if dateDirty {
-            // Date carries the offset baked into the ISO 8601 string, so a
-            // single tag write reflects both date and tz when both are dirty.
-            if let date = record.captureDate {
-                let iso = formatISO8601(date, offsetMinutes: offsetMinutes)
-                return [
-                    "-XMP-photoshop:DateCreated=\(iso)",
-                    "-XMP-exif:OffsetTimeOriginal=\(offsetStr)",
-                ]
-            }
-            return [
-                "-XMP-photoshop:DateCreated=",
-                "-XMP-exif:OffsetTimeOriginal=",
-            ]
-        }
-        // Only timezone is dirty.
-        return ["-XMP-exif:OffsetTimeOriginal=\(offsetStr)"]
+        return ["-XMP-photoshop:DateCreated=\(formatISO8601(date, offsetMinutes: offsetMinutes))"]
     }
 
     private static func formatISO8601(_ date: Date, offsetMinutes: Int) -> String {
@@ -172,9 +197,4 @@ enum ExifToolWriter {
         return df.string(from: date)
     }
 
-    private static func formatOffset(_ minutes: Int) -> String {
-        let sign = minutes < 0 ? "-" : "+"
-        let absMin = Swift.abs(minutes)
-        return String(format: "%@%02d:%02d", sign, absMin / 60, absMin % 60)
-    }
 }

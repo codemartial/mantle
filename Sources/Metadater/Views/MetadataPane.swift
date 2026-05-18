@@ -41,20 +41,38 @@ struct MetadataPane: View {
     // MARK: - Debug
 
     private var debugStrip: some View {
-        Text("debug: ready")
-            .font(.system(size: 10 * 1.15, design: .monospaced))
-            .foregroundStyle(Theme.fgDim)
-            .lineLimit(2)
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    if state.debugLog.lines.isEmpty {
+                        Text("(debug log -- exiftool save commands appear here)")
+                            .foregroundStyle(Theme.fgFaint)
+                    }
+                    ForEach(Array(state.debugLog.lines.enumerated()), id: \.offset) { idx, line in
+                        Text(line)
+                            .id(idx)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Theme.fgDim)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            .frame(height: 200)
             .background(Theme.bgInput)
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(Theme.line1)
                     .frame(height: 1)
             }
+            .onChange(of: state.debugLog.lines.count) { _, _ in
+                if let last = state.debugLog.lines.indices.last {
+                    proxy.scrollTo(last, anchor: .bottom)
+                }
+            }
+        }
     }
 
     // MARK: - Empty

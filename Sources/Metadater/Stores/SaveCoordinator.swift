@@ -86,33 +86,35 @@ final class SaveCoordinator {
         let snapFields = fields
 
         Task { [weak self] in
-            let result: Result<URL, Error> = await Task.detached(priority: .userInitiated) {
-                do {
-                    let url = try ExifToolWriter.write(record: snapshot, fields: snapFields)
-                    return .success(url)
-                } catch {
-                    return .failure(error)
-                }
+            let result = await Task.detached(priority: .userInitiated) {
+                ExifToolWriter.write(record: snapshot, fields: snapFields)
             }.value
-            await self?.handleCompletion(id: id, result: result, snapshot: snapshot, fields: snapFields)
+            self?.handleCompletion(id: id, result: result, snapshot: snapshot, fields: snapFields)
         }
     }
 
     private func handleCompletion(id: String,
-                                  result: Result<URL, Error>,
+                                  result: Result<ExifToolWriter.WriteResult, ExifToolWriter.WriteError>,
                                   snapshot: ImageRecord,
                                   fields: Set<EditableField>) {
         guard let state else { return }
         inFlight.remove(id)
 
         switch result {
-        case .success(let url):
+        case .success(let res):
             state.edits.markSaved(id, fields: fields, snapshot: snapshot)
-            state.adoptSidecar(id: id, url: url)
+            state.adoptSidecar(id: id, url: res.sidecar)
+            state.debugLog.append(String(format: "[ok %.2fs] %@", res.duration, res.command))
             state.status = .saved
             scheduleSavedRevert()
             log.debug("save ok: \(id, privacy: .public)")
         case .failure(let err):
+            switch err {
+            case .exiftoolNotFound:
+                state.debugLog.append("[FAIL] exiftool binary not found")
+            case let .processFailed(_, stderr, cmd, dur):
+                state.debugLog.append(String(format: "[FAIL %.2fs] %@ -- %@", dur, cmd, Self.firstLine(stderr)))
+            }
             state.status = .failed(errorMessage(err))
             log.error("save failed: \(id, privacy: .public) -- \(err.localizedDescription, privacy: .public)")
         }
@@ -150,15 +152,15 @@ final class SaveCoordinator {
         }
     }
 
-    private func errorMessage(_ err: Error) -> String {
-        if let werr = err as? ExifToolWriter.WriteError {
-            switch werr {
-            case .exiftoolNotFound: return "ExifTool not found"
-            case .processFailed(_, let stderr):
-                let firstLine = stderr.split(separator: "\n").first.map(String.init) ?? "unknown"
-                return String(firstLine.prefix(120))
-            }
+    private func errorMessage(_ err: ExifToolWriter.WriteError) -> String {
+        switch err {
+        case .exiftoolNotFound:                  return "ExifTool not found"
+        case let .processFailed(_, stderr, _, _): return Self.firstLine(stderr)
         }
-        return err.localizedDescription
+    }
+
+    private static func firstLine(_ stderr: String) -> String {
+        let line = stderr.split(separator: "\n").first.map(String.init) ?? "unknown"
+        return String(line.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
     }
 }

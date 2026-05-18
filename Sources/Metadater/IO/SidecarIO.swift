@@ -65,7 +65,14 @@ enum SidecarIO {
 
         // Timezone first -- needed to correctly parse offset-less date
         // strings (EXIF dates have no offset baked in; XMP dates do).
+        //
+        // XMP-photoshop:DateCreated wins over the EXIF offset tags so a
+        // user-edited sidecar can override the camera's recorded zone.
+        // OffsetTimeOriginal is an EXIF-only tag and can't be written
+        // back to a sidecar, so the offset on the XMP date string is the
+        // only knob the user has for changing TZ.
         let offsetStr = firstNonEmpty(
+            extractISOOffset(string(json, "XMP-photoshop:DateCreated")),
             string(json, "ExifIFD:OffsetTimeOriginal"),
             string(json, "ExifIFD:OffsetTime"),
             string(json, "ExifIFD:OffsetTimeDigitized")
@@ -388,6 +395,27 @@ private func parseAltitude(_ raw: Any?) -> Double? {
     }
     let isBelow = m.range(at: 2).location != NSNotFound
     return isBelow ? -value : value
+}
+
+/// Pulls the offset suffix off an ISO 8601 date-time string
+/// (e.g. `2026-05-17T15:23:55-08:00` -> `-08:00`,
+/// `2026-05-17T22:23:55Z` -> `+00:00`). Returns `""` when the input
+/// carries no offset suffix, letting callers fall back to other sources.
+private func extractISOOffset(_ s: String) -> String {
+    let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    if trimmed.hasSuffix("Z") || trimmed.hasSuffix("z") { return "+00:00" }
+
+    let pattern = #"([+-])(\d{2}):?(\d{2})$"#
+    guard let regex = try? NSRegularExpression(pattern: pattern),
+          let m = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+          m.numberOfRanges == 4,
+          let signR  = Range(m.range(at: 1), in: trimmed),
+          let hoursR = Range(m.range(at: 2), in: trimmed),
+          let minsR  = Range(m.range(at: 3), in: trimmed) else {
+        return ""
+    }
+    return "\(trimmed[signR])\(trimmed[hoursR]):\(trimmed[minsR])"
 }
 
 /// Parses an offset string like `-08:00` or `+05:30` into a TZRule.

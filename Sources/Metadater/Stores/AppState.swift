@@ -13,6 +13,7 @@ final class AppState {
 
     let thumbs = ThumbnailCache()
     let edits = EditStore()
+    let debugLog = DebugLog()
     // Force-unwrapped because saver needs `self` -- assigned in init below.
     // SaveCoordinator stores AppState weakly, so the cycle is broken.
     private(set) var saver: SaveCoordinator!

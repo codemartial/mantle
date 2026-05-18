@@ -71,8 +71,16 @@ struct DateEditor: View {
 
     private var tzPicker: some View {
         Menu {
-            ForEach(TZOptions.all, id: \.self) { label in
-                Button(label) { selectTimezone(label: label) }
+            Button("Auto") { selectTimezone(identifier: TZOptions.auto) }
+            Divider()
+            ForEach(TZOptions.regions, id: \.self) { region in
+                Menu(region) {
+                    ForEach(TZOptions.cities(in: region), id: \.self) { ident in
+                        Button(TZOptions.cityDisplay(ident)) {
+                            selectTimezone(identifier: ident)
+                        }
+                    }
+                }
             }
         } label: {
             HStack(spacing: 4) {
@@ -131,12 +139,13 @@ struct DateEditor: View {
         }
     }
 
-    private func selectTimezone(label: String) {
+    private func selectTimezone(identifier: String) {
         guard let id = state.selectedID,
               let record = state.selectedRecord else { return }
-        let newRule = TZOptions.rule(for: label)
-        guard newRule != record.timezone else { return }
-
+        let newRule = TZOptions.rule(for: identifier, at: record.captureDate)
+        // Always assign -- the displayed label has to reflect the user's
+        // pick even when the offset is unchanged. EditableField's tz
+        // comparator ignores labels so this won't false-positive as dirty.
         state.updateField(id: id, field: .timezone) { rec in
             rec.timezone = newRule
         }
@@ -209,47 +218,77 @@ private struct DateSegment: View {
     }
 }
 
-// Catalogue of the TZ options shown in the dropdown. Mirrors the
-// TZ_OPTIONS list in app.jsx so the design stays in lockstep with the
-// prototype while the data model in TZRule is being filled out elsewhere.
-// Labels follow the SidecarIO format `UTC+HH:MM - <suffix>` so a value
-// pulled from a real TZRule.fixed can sit alongside the curated entries
-// without reformatting.
+// Full IANA timezone catalogue, served hierarchically by region for the
+// picker submenus. Labels stored on TZRule.fixed are the IANA identifier
+// (e.g. "America/Los_Angeles"); the offset minutes are computed relative
+// to the photo's captureDate at pick time so DST is honoured for the
+// year in question.
+//
+// "Auto" is a special label the picker shows for both .auto and .unknown
+// records -- picking it from the menu sets the rule back to .auto.
 enum TZOptions {
-    static let auto = "UTC+00:00 - Auto"
+    static let auto = "Auto"
 
-    static let all: [String] = [
-        "UTC+00:00 - Auto",
-        "UTC+00:00 - Iceland",
-        "UTC+00:00 - UK",
-        "UTC+01:00 - CET",
-        "UTC-05:00 - EST",
-        "UTC-08:00 - PST",
-        "UTC+05:30 - IST",
-        "UTC+09:00 - JST",
-    ]
+    // `regionMap` is the single source of truth. `all` is preserved as a
+    // flat sorted list in case callers want it. Built once at module load
+    // by walking the sorted identifier list and bucketing on the first
+    // path segment. Because `all` is sorted alphabetically, both the
+    // regions and the cities within each region come out sorted without
+    // any extra .sorted() call.
+    static let all: [String] = TimeZone.knownTimeZoneIdentifiers.sorted()
 
+    private static let regionMap: [String: [String]] = {
+        var map: [String: [String]] = [:]
+        for id in all {
+            let head = id.split(separator: "/").first.map(String.init) ?? id
+            map[head, default: []].append(id)
+        }
+        return map
+    }()
+
+    static let regions: [String] = {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for id in all {
+            let head = id.split(separator: "/").first.map(String.init) ?? id
+            if seen.insert(head).inserted {
+                out.append(head)
+            }
+        }
+        return out
+    }()
+
+    static func cities(in region: String) -> [String] {
+        regionMap[region] ?? []
+    }
+
+    // What to show as the menu item under a region. "America/Los_Angeles"
+    // -> "Los Angeles". "America/Indiana/Indianapolis" -> "Indiana / Indianapolis".
+    static func cityDisplay(_ identifier: String) -> String {
+        let comps = identifier.split(separator: "/").dropFirst()
+        let joined = comps.map { $0.replacingOccurrences(of: "_", with: " ") }
+                          .joined(separator: " / ")
+        return joined.isEmpty ? identifier : joined
+    }
+
+    // Label rendered in the picker's button. .auto / .unknown -> "Auto";
+    // .fixed shows whatever the rule stored (typically the IANA id).
     static func label(for rule: TZRule) -> String {
         switch rule {
-        case .unknown:               return auto
-        case .auto:                  return auto
+        case .unknown, .auto:        return auto
         case .fixed(_, let label):   return label
         }
     }
 
-    // Inverse of `label(for:)`. Parses a curated label string back into
-    // a TZRule. "UTC+00:00 - Auto" round-trips to .auto so picking it
-    // from the menu doesn't lock in a fixed-zero rule.
-    static func rule(for label: String) -> TZRule {
-        if label == auto { return .auto }
-        // Pattern: "UTC<sign><HH>:<MM> - <suffix>"
-        let trimmed = label.replacingOccurrences(of: "UTC", with: "")
-        let parts = trimmed.split(separator: " ", maxSplits: 1)
-        let offsetStr = parts.first.map(String.init) ?? ""
-        let sign = offsetStr.first == "-" ? -1 : 1
-        let nums = offsetStr.dropFirst().split(separator: ":").compactMap { Int($0) }
-        guard nums.count == 2 else { return .unknown }
-        let mins = sign * (nums[0] * 60 + nums[1])
-        return .fixed(offsetMinutes: mins, label: label)
+    // Convert a user pick into a TZRule. "Auto" -> .auto. Otherwise
+    // resolve the IANA id and compute offset at the photo's captureDate
+    // (falling back to now if the photo has no date yet). The label on
+    // the .fixed case is the IANA id, so it round-trips back through the
+    // picker visually.
+    static func rule(for identifier: String, at date: Date?) -> TZRule {
+        if identifier == auto { return .auto }
+        guard let tz = TimeZone(identifier: identifier) else { return .unknown }
+        let secs = tz.secondsFromGMT(for: date ?? Date())
+        return .fixed(offsetMinutes: secs / 60, label: identifier)
     }
 }
