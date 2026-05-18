@@ -189,7 +189,7 @@ enum ExifToolOneShot {
 
     // MARK: - Bundle resource lookup
 
-    private static func exiftoolBinaryURL() -> URL? {
+    static func exiftoolBinaryURL() -> URL? {
         guard let dir = Bundle.module.url(forResource: "exiftool", withExtension: nil) else {
             return nil
         }
@@ -197,7 +197,7 @@ enum ExifToolOneShot {
         return FileManager.default.isExecutableFile(atPath: exe.path) ? exe : nil
     }
 
-    private static func exiftoolLibURL() -> URL? {
+    static func exiftoolLibURL() -> URL? {
         guard let dir = Bundle.module.url(forResource: "exiftool", withExtension: nil) else {
             return nil
         }

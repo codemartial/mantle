@@ -10,8 +10,6 @@ import SwiftUI
 struct CaptionBlock: View {
     @Environment(AppState.self) private var state
 
-    @State private var headline: String = ""
-    @State private var caption: String = ""
     @FocusState private var focus: Field?
 
     private enum Field { case headline, caption }
@@ -24,7 +22,7 @@ struct CaptionBlock: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 labelRow("Headline",
-                         count: headline.count,
+                         count: headlineValue.count,
                          warnAt: headlineWarnAt,
                          overAt: headlineOverAt)
                 headlineInput
@@ -32,7 +30,7 @@ struct CaptionBlock: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 labelRow("Caption",
-                         count: caption.count,
+                         count: captionValue.count,
                          warnAt: nil,
                          overAt: nil)
                 captionInput
@@ -47,14 +45,37 @@ struct CaptionBlock: View {
                 .frame(height: 1),
             alignment: .top
         )
-        .onAppear { seedFromRecord() }
-        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
+    }
+
+    // MARK: - Bindings (read from store, write through AppState)
+
+    private var headlineValue: String { state.selectedRecord?.headline ?? "" }
+    private var captionValue: String  { state.selectedRecord?.caption ?? "" }
+
+    private var headlineBinding: Binding<String> {
+        Binding(
+            get: { headlineValue },
+            set: { newValue in
+                guard let id = state.selectedID else { return }
+                state.updateField(id: id, field: .headline) { $0.headline = newValue }
+            }
+        )
+    }
+
+    private var captionBinding: Binding<String> {
+        Binding(
+            get: { captionValue },
+            set: { newValue in
+                guard let id = state.selectedID else { return }
+                state.updateField(id: id, field: .caption) { $0.caption = newValue }
+            }
+        )
     }
 
     // MARK: - Inputs
 
     private var headlineInput: some View {
-        TextField("", text: $headline)
+        TextField("", text: headlineBinding)
             .textFieldStyle(.plain)
             .focused($focus, equals: .headline)
             .font(.system(size: 11 * 1.15))
@@ -69,13 +90,18 @@ struct CaptionBlock: View {
     }
 
     private var captionInput: some View {
-        TextEditor(text: $caption)
+        // TextEditor adds ~5pt lineFragmentPadding internally on the
+        // horizontal axis but zero on the vertical, so visually-equal
+        // padding requires an asymmetric outer .padding to compensate.
+        // 4pt horizontal + ~5pt internal -> ~9pt visible inset.
+        // 8pt vertical + ~0pt internal -> ~8pt visible inset.
+        TextEditor(text: captionBinding)
             .focused($focus, equals: .caption)
             .font(.system(size: 11 * 1.15))
             .foregroundStyle(Theme.fgMute)
             .scrollContentBackground(.hidden)
             .padding(.horizontal, 4)
-            .padding(.vertical, 2)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
             .background(Theme.bgInput)
             .overlay(focusFrame(active: focus == .caption))
@@ -86,14 +112,6 @@ struct CaptionBlock: View {
         RoundedRectangle(cornerRadius: 5)
             .strokeBorder(active ? Theme.accentEdge : Theme.line1,
                           lineWidth: active ? 1 : 0.5)
-    }
-
-    // MARK: - Seeding from store
-
-    private func seedFromRecord() {
-        let r = state.selectedRecord
-        headline = r?.headline ?? ""
-        caption = r?.caption ?? ""
     }
 
     // MARK: - Label + counter row

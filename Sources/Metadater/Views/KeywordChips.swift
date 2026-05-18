@@ -2,13 +2,12 @@ import SwiftUI
 
 // Chip list with an inline draft input. Comma or Enter commits. Backspace
 // on an empty draft removes the last chip. Each chip carries an X to remove.
-// Design pass: local @State seeded from EditStore on selection change.
-// Lowercases + de-dupes on commit, matching app.jsx KeywordChips.
+// Reads keywords directly from EditStore via AppState; mutations route
+// through AppState.updateField so the dirty bit recomputes per change.
 
 struct KeywordChips: View {
     @Environment(AppState.self) private var state
 
-    @State private var keywords: [String] = []
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
 
@@ -39,8 +38,13 @@ struct KeywordChips: View {
             .contentShape(Rectangle())
             .onTapGesture { inputFocused = true }
         }
-        .onAppear { seedFromRecord() }
-        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
+        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in draft = "" }
+    }
+
+    // MARK: - Source of truth
+
+    private var keywords: [String] {
+        state.selectedRecord?.keywords ?? []
     }
 
     // MARK: - Chip
@@ -56,7 +60,7 @@ struct KeywordChips: View {
                 .font(.system(size: 11 * 1.15))
                 .foregroundStyle(Theme.fg)
             Button {
-                keywords.remove(at: index)
+                removeKeyword(at: index)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 8 * 1.15, weight: .medium))
@@ -92,30 +96,48 @@ struct KeywordChips: View {
             }
             .onKeyPress(.delete) {
                 if draft.isEmpty, !keywords.isEmpty {
-                    keywords.removeLast()
+                    removeKeyword(at: keywords.count - 1)
                     return .handled
                 }
                 return .ignored
             }
     }
 
-    // MARK: - Commit / seed
+    // MARK: - Mutations
 
     private func commit(_ raw: String) {
         let parts = raw
             .split(separator: ",", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard !parts.isEmpty else { draft = ""; return }
-        for part in parts where !keywords.contains(part) {
-            keywords.append(part)
+        guard !parts.isEmpty, let id = state.selectedID else {
+            draft = ""
+            return
+        }
+        // Case-insensitive dedupe at add-time: typing "beach" when "Beach"
+        // is already in the chips drops the new one. To rename case, the
+        // user removes the existing chip first, then re-adds with the new
+        // case. The on-disk comparator stays case-sensitive (so loading
+        // ["Beach","beach"] from someone else's sidecar doesn't get
+        // silently collapsed).
+        state.updateField(id: id, field: .keywords) { record in
+            var existingLower = Set(record.keywords.map { $0.lowercased() })
+            for part in parts {
+                let lower = part.lowercased()
+                if existingLower.contains(lower) { continue }
+                record.keywords.append(part)
+                existingLower.insert(lower)
+            }
         }
         draft = ""
     }
 
-    private func seedFromRecord() {
-        keywords = state.selectedRecord?.keywords ?? []
-        draft = ""
+    private func removeKeyword(at index: Int) {
+        guard let id = state.selectedID else { return }
+        state.updateField(id: id, field: .keywords) { record in
+            guard index < record.keywords.count else { return }
+            record.keywords.remove(at: index)
+        }
     }
 }
 

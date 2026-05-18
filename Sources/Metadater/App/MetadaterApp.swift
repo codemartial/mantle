@@ -9,7 +9,10 @@ struct MetadaterApp: App {
         WindowGroup {
             RootView()
                 .environment(state)
-                .task { state.bootstrap() }
+                .task {
+                    appDelegate.attach(state: state)
+                    state.bootstrap()
+                }
         }
         .defaultSize(width: 1100, height: 700)
         .windowResizability(.contentMinSize)

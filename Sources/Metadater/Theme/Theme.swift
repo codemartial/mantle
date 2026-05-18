@@ -15,7 +15,10 @@ enum Theme {
     static let bgElev       = oklch(0.27,  0.005, 250)
     static let bgElevHi     = oklch(0.32,  0.005, 250)
     static let bgInput      = oklch(0.17,  0.005, 250)
-    static let bgThumb      = oklch(0.24,  0.005, 250)
+    // Matches bgPanel so square thumbnail tiles dissolve into the
+    // browser pane background -- letterbox bands on tall / wide shots
+    // read as part of the pane, not as a visible tile boundary.
+    static let bgThumb      = oklch(0.225, 0.005, 250)
     static let bgStripeA    = oklch(0.16,  0.005, 250)
     static let bgStripeB    = oklch(0.18,  0.005, 250)
 

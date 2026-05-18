@@ -86,17 +86,18 @@ struct StatusBar: View {
 
     private var statusBackground: Color {
         switch state.status {
-        case .idle, .saved: return Theme.ok.opacity(0.18)
-        case .saving:       return Theme.warn.opacity(0.20)
-        case .failed:       return Theme.no.opacity(0.22)
+        case .idle, .saved:   return Theme.ok.opacity(0.18)
+        case .unsaved:        return Theme.warn.opacity(0.18)
+        case .saving:         return Theme.warn.opacity(0.20)
+        case .failed:         return Theme.no.opacity(0.22)
         }
     }
 
     private var statusForeground: Color {
         switch state.status {
-        case .idle, .saved: return Theme.ok
-        case .saving:       return Theme.warn
-        case .failed:       return Theme.no
+        case .idle, .saved:       return Theme.ok
+        case .unsaved, .saving:   return Theme.warn
+        case .failed:             return Theme.no
         }
     }
 
@@ -110,6 +111,7 @@ struct StatusBar: View {
     private var statusIcon: String {
         switch state.status {
         case .idle, .saved: return "checkmark"
+        case .unsaved:      return "pencil"
         case .saving:       return "arrow.triangle.2.circlepath"
         case .failed:       return "exclamationmark"
         }

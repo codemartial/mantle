@@ -18,12 +18,16 @@ struct ThumbnailCell: View {
                 ZStack {
                     Theme.bgThumb
                     if let image {
+                        // scaledToFit centers the image inside the square
+                        // cell, preserving aspect ratio. Tall and wide shots
+                        // get the same cell size; orientation just shows up
+                        // as letterboxing in the unused axis (bgThumb
+                        // shows through).
                         Image(nsImage: image)
                             .resizable()
                             .interpolation(.high)
-                            .scaledToFill()
+                            .scaledToFit()
                             .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
                     } else {
                         Image(systemName: "photo")
                             .font(Typo.size(22))
@@ -58,7 +62,7 @@ struct ThumbnailCell: View {
                     .padding(4)
             }
         }
-        .aspectRatio(cellAspectRatio, contentMode: .fit)
+        .aspectRatio(1, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
@@ -79,17 +83,6 @@ struct ThumbnailCell: View {
                 image = loaded
             }
         }
-    }
-
-    /// Prefer the decoded image's actual aspect once it's loaded -- the
-    /// extracted preview JPEG has reliable dimensions for every file we can
-    /// decode, including Z8 NEFs whose dimensions ImageIO can't read off
-    /// the parent. Falls back to the scan-time estimate, then 3:2.
-    private var cellAspectRatio: CGFloat {
-        if let image, image.size.width > 0, image.size.height > 0 {
-            return image.size.width / image.size.height
-        }
-        return entry.aspectRatio
     }
 
     private var selectionBadge: some View {

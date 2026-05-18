@@ -2,14 +2,13 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var state
-    @State private var browserMode: BrowserMode = .grid
 
     var body: some View {
         VStack(spacing: 0) {
 
-            Titlebar(browserMode: $browserMode)
+            Titlebar()
 
-            ThreePane(browserMode: $browserMode)
+            ThreePane()
                 .frame(maxHeight: .infinity)
 
             Rectangle()
@@ -42,7 +41,6 @@ struct RootView: View {
 // devouring all the extra space.
 private struct ThreePane: View {
     @Environment(AppState.self) private var state
-    @Binding var browserMode: BrowserMode
 
     private let browserWidth: CGFloat = 252
     private let hairlineWidth: CGFloat = 1
@@ -60,7 +58,7 @@ private struct ThreePane: View {
 
             HStack(spacing: 0) {
 
-                BrowserPane(mode: $browserMode)
+                BrowserPane()
                     .frame(width: browserWidth)
                     .background(Theme.bgPanel)
 

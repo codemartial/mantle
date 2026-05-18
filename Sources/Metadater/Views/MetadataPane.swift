@@ -9,6 +9,8 @@ struct MetadataPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
+            debugStrip
+
             if state.selectedEntry == nil {
                 emptyPlaceholder
             } else {
@@ -36,6 +38,25 @@ struct MetadataPane: View {
         }
     }
 
+    // MARK: - Debug
+
+    private var debugStrip: some View {
+        Text("debug: ready")
+            .font(.system(size: 10 * 1.15, design: .monospaced))
+            .foregroundStyle(Theme.fgDim)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Theme.bgInput)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Theme.line1)
+                    .frame(height: 1)
+            }
+    }
+
     // MARK: - Empty
 
     @ViewBuilder
@@ -61,8 +82,11 @@ struct MetadataPane: View {
         let lens = record?.lens ?? ""
         let exposure: String = {
             guard let r = record else { return "" }
-            let parts = [r.shutter, r.aperture].filter { !$0.isEmpty }
-            return parts.joined(separator: "  -  ")
+            // Mathematical italic small f (U+1D453) -- the conventional
+            // glyph for f-number in photographic notation, e.g. "f/2.8".
+            let aperture = r.aperture.isEmpty ? "" : "\u{1D453}/\(r.aperture)"
+            let parts = [r.shutter, aperture].filter { !$0.isEmpty }
+            return parts.joined(separator: " ")
         }()
         let iso = record?.iso ?? 0
         let focal = record?.focal ?? ""
