@@ -11,6 +11,10 @@ final class AppState {
     var status: SaveStatus = .idle
     var isScanning: Bool = false
 
+    var mapStyle: MapStyleChoice = MapStyleChoice.load() {
+        didSet { mapStyle.save() }
+    }
+
     let thumbs = ThumbnailCache()
     let edits = EditStore()
     let debugLog = DebugLog()
@@ -18,10 +22,10 @@ final class AppState {
     // SaveCoordinator stores AppState weakly, so the cycle is broken.
     private(set) var saver: SaveCoordinator!
 
-    // One-shot auto-select intent. Bootstrap sets these AFTER calling
-    // openFolder (which clears them) so the post-scan completion can
-    // restore the previously-open file. Explicit UI folder opens leave
-    // both nil so selection stays under the user's control.
+    // One-shot auto-select intent. openFolder takes these as parameters so
+    // the bootstrap restore path and explicit-UI-open path can both work
+    // through the same async flow without racing against the reset that
+    // happens inside performOpenFolder.
     private var autoSelectOnScan: Bool = false
     private var preferredSelectionID: String?
 
@@ -31,24 +35,22 @@ final class AppState {
 
     func bootstrap() {
         if let url = FolderBookmark.load() {
-            openFolder(url)
-            autoSelectOnScan = true
-            preferredSelectionID = SelectionBookmark.load()
+            openFolder(url, autoSelect: true, preferredID: SelectionBookmark.load())
         }
     }
 
-    func openFolder(_ url: URL) {
+    func openFolder(_ url: URL, autoSelect: Bool = false, preferredID: String? = nil) {
         // Flush any pending saves from the previous folder before resetting
         // the edit store. The UI doesn't visibly change until performOpen
         // -- the user just sees a brief "Saving..." pill if needed.
         Task { [weak self] in
             guard let self else { return }
             await self.saver.flushAll()
-            self.performOpenFolder(url)
+            self.performOpenFolder(url, autoSelect: autoSelect, preferredID: preferredID)
         }
     }
 
-    private func performOpenFolder(_ url: URL) {
+    private func performOpenFolder(_ url: URL, autoSelect: Bool, preferredID: String?) {
         folderURL = url
         FolderBookmark.save(url)
         selectedID = nil
@@ -56,8 +58,8 @@ final class AppState {
         library = []
         thumbs.reset()
         edits.reset()
-        autoSelectOnScan = false
-        preferredSelectionID = nil
+        autoSelectOnScan = autoSelect
+        preferredSelectionID = preferredID
         scan(url)
     }
 
@@ -133,6 +135,16 @@ final class AppState {
                      _ transform: (inout ImageRecord) -> Void) {
         edits.update(id, field: field, transform)
         saver.dirtyChanged()
+    }
+
+    // Map pin drag and GeoCells text commit both end here. Lat or lon nil
+    // (e.g. user clears one cell) is a valid state; the writer will emit
+    // empty XMP-exif tags to scrub the sidecar back to no-coord.
+    func updateLocation(id: String, lat: Double?, lon: Double?) {
+        updateField(id: id, field: .location) {
+            $0.latitude = lat
+            $0.longitude = lon
+        }
     }
 
     // Called by SaveCoordinator after a successful write. If a fresh

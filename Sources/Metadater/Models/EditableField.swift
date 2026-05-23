@@ -14,6 +14,7 @@ enum EditableField: CaseIterable, Sendable, Hashable {
     case keywords
     case captureDate
     case timezone
+    case location
 
     func equals(_ a: ImageRecord, _ b: ImageRecord) -> Bool {
         switch self {
@@ -22,6 +23,8 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case .keywords:    return Self.keywordsEqual(a.keywords, b.keywords)
         case .captureDate: return Self.dateEqualToSecond(a.captureDate, b.captureDate)
         case .timezone:    return Self.timezoneEqual(a.timezone, b.timezone)
+        case .location:    return Self.coordsEqual(a.latitude, a.longitude,
+                                                   b.latitude, b.longitude)
         }
     }
 
@@ -58,6 +61,21 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case let (a?, b?):
             return Int(a.timeIntervalSinceReferenceDate.rounded()) ==
                    Int(b.timeIntervalSinceReferenceDate.rounded())
+        default: return false
+        }
+    }
+
+    // Tolerance ~ 1e-7 degrees (~1cm) absorbs round-trip drift through
+    // ExifTool's 7-decimal formatting on save -> reload.
+    private static func coordsEqual(_ ax: Double?, _ ay: Double?,
+                                    _ bx: Double?, _ by: Double?) -> Bool {
+        coordEqual(ax, bx) && coordEqual(ay, by)
+    }
+
+    private static func coordEqual(_ a: Double?, _ b: Double?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (x?, y?): return abs(x - y) < 1e-7
         default: return false
         }
     }

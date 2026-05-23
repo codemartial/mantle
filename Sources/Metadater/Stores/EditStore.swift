@@ -65,6 +65,9 @@ final class EditStore {
         case .keywords:    dst.keywords = src.keywords
         case .captureDate: dst.captureDate = src.captureDate
         case .timezone:    dst.timezone = src.timezone
+        case .location:
+            dst.latitude = src.latitude
+            dst.longitude = src.longitude
         }
     }
 

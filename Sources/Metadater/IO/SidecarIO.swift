@@ -139,7 +139,14 @@ enum SidecarIO {
         )
 
         let alt = parseAltitude(json["Composite:GPSAltitude"]) ?? double(json, "XMP-exif:GPSAltitude")
-        let dir = double(json, "Composite:GPSImgDirection")
+        // No Composite:GPSImgDirection -- the underlying tag is already a
+        // signed decimal, so ExifTool doesn't synthesise a composite for
+        // it. Read GPS:GPSImgDirection (embedded EXIF, group-1 form) first,
+        // then the XMP-exif sidecar form.
+        let dir = double(json,
+                         "GPS:GPSImgDirection",
+                         "XMP-exif:GPSImgDirection",
+                         "Composite:GPSImgDirection")
 
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?
             .int64Value ?? 0

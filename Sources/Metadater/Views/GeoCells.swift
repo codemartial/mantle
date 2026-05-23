@@ -26,6 +26,22 @@ struct GeoCells: View {
         }
         .onAppear { seedFromRecord() }
         .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
+        // Pin-drag and other external mutations land here. Skip if the
+        // record value matches our local copy (i.e. the change came from
+        // our own pushToState), so typing in one cell doesn't get its
+        // neighbour overwritten while focused.
+        .onChange(of: state.selectedRecord?.latitude) { _, new in
+            if !Self.coordsClose(latitude, new) {
+                latitude = new
+                latText = Self.formatCoord(new)
+            }
+        }
+        .onChange(of: state.selectedRecord?.longitude) { _, new in
+            if !Self.coordsClose(longitude, new) {
+                longitude = new
+                lonText = Self.formatCoord(new)
+            }
+        }
     }
 
     // MARK: - Cell
@@ -57,11 +73,27 @@ struct GeoCells: View {
         } else {
             lonText = Self.formatCoord(longitude)
         }
+        pushToState()
+    }
+
+    // Single entry point for write-back. Both a cell commit and a paste
+    // (which can fill both cells at once) end up here.
+    private func pushToState() {
+        guard let id = state.selectedRecord?.id else { return }
+        state.updateLocation(id: id, lat: latitude, lon: longitude)
     }
 
     static func formatCoord(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "" }
         return String(format: "%.4f", abs(value)) + "\u{00B0}"
+    }
+
+    static func coordsClose(_ a: Double?, _ b: Double?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (x?, y?): return abs(x - y) < 1e-7
+        default: return false
+        }
     }
 }
 
@@ -158,6 +190,7 @@ private struct GeoCell: View {
             value = single
             text = GeoCells.formatCoord(single)
         }
+        onCommit()
     }
 }
 

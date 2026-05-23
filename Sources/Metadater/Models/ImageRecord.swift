@@ -23,8 +23,8 @@ struct ImageRecord: Identifiable, Hashable, Sendable {
     let focal: String
     let originalCaptureDate: Date?
 
-    let latitude: Double?
-    let longitude: Double?
+    var latitude: Double?
+    var longitude: Double?
     let altitude: Double?
     let direction: Double?
     let place: String

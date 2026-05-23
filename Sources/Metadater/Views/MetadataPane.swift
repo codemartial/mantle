@@ -137,22 +137,24 @@ struct MetadataPane: View {
 
     // Map aspect = original 228w x 110h design dimensions. Holding this
     // ratio constant means the map widens with the pane and grows
-    // proportionally taller, instead of staying 110pt high and stretching
-    // into a thin landscape strip on wider windows.
-    private let mapAspectRatio: CGFloat = 228.0 / 110.0
+    // Square map: width fills the pane, height follows by aspect ratio --
+    // same sizing mechanism as the original placeholder, just retuned from
+    // 228:110 to 1:1 so the cone and pin have enough headroom.
+    private let mapAspectRatio: CGFloat = 1.0
 
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader("Location") {
-                Text("Edit pin")
-                    .font(.system(size: 10 * 1.15, weight: .medium))
-                    .foregroundStyle(Theme.accent)
+                mapStyleToggle
             }
 
-            // Map placeholder: dark rectangle with subtle gradient and a pin
-            // dot for design preview. Real MapKit comes in a polish pass.
-            mapPlaceholder
+            LocationMap()
                 .aspectRatio(mapAspectRatio, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(Theme.line1, lineWidth: 0.5)
+                )
 
             GeoCells()
 
@@ -160,38 +162,18 @@ struct MetadataPane: View {
         }
     }
 
-    private var mapPlaceholder: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Theme.bgInput)
-
-            // Soft contour ring suggestion
-            Circle()
-                .strokeBorder(Theme.line1.opacity(0.7), lineWidth: 0.5)
-                .frame(width: 90, height: 90)
-            Circle()
-                .strokeBorder(Theme.line1.opacity(0.5), lineWidth: 0.5)
-                .frame(width: 56, height: 56)
-
-            if record?.latitude != nil && record?.longitude != nil {
-                ZStack {
-                    Circle()
-                        .fill(Theme.accent.opacity(0.25))
-                        .frame(width: 22, height: 22)
-                    Circle()
-                        .fill(Theme.accent)
-                        .frame(width: 10, height: 10)
-                        .overlay(
-                            Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5)
-                        )
-                }
+    @ViewBuilder
+    private var mapStyleToggle: some View {
+        @Bindable var state = state
+        Picker("", selection: $state.mapStyle) {
+            ForEach(MapStyleChoice.allCases, id: \.self) { choice in
+                Text(choice.label).tag(choice)
             }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Theme.line1, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.mini)
+        .fixedSize()
     }
 
     private var placeLine: some View {

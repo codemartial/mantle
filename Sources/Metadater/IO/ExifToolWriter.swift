@@ -49,6 +49,7 @@ enum ExifToolWriter {
         args += captionArgs(record: record, fields: fields)
         args += keywordArgs(record: record, fields: fields)
         args += dateAndTimeArgs(record: record, fields: fields)
+        args += locationArgs(record: record, fields: fields)
 
         // Target sidecar. -o creates a fresh file from the supplied tags;
         // without -o, exiftool updates an existing file in place.
@@ -187,6 +188,27 @@ enum ExifToolWriter {
             return 0
         }()
         return ["-XMP-photoshop:DateCreated=\(formatISO8601(date, offsetMinutes: offsetMinutes))"]
+    }
+
+    // Write XMP-exif lat/lon as unsigned magnitudes paired with explicit
+    // N/S/E/W Ref tags -- that's what SidecarIO.parseGPS reads back, so the
+    // round-trip lands cleanly. 7 decimal degrees ~= 1cm precision.
+    private static func locationArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {
+        guard fields.contains(.location) else { return [] }
+        guard let lat = record.latitude, let lon = record.longitude else {
+            return [
+                "-XMP-exif:GPSLatitude=",
+                "-XMP-exif:GPSLongitude=",
+                "-XMP-exif:GPSLatitudeRef=",
+                "-XMP-exif:GPSLongitudeRef=",
+            ]
+        }
+        return [
+            String(format: "-XMP-exif:GPSLatitude=%.7f", abs(lat)),
+            String(format: "-XMP-exif:GPSLongitude=%.7f", abs(lon)),
+            "-XMP-exif:GPSLatitudeRef=\(lat >= 0 ? "N" : "S")",
+            "-XMP-exif:GPSLongitudeRef=\(lon >= 0 ? "E" : "W")",
+        ]
     }
 
     private static func formatISO8601(_ date: Date, offsetMinutes: Int) -> String {
