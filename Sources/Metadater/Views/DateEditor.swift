@@ -3,15 +3,20 @@ import SwiftUI
 // Segmented Y / MM / DD  HH : mm : ss editor with a trailing timezone picker.
 // Each segment holds local text state for typing-in-progress; on focus
 // loss, the segments are reassembled into a Date in the current timezone
-// and pushed to the store via AppState.updateField. The timezone picker
-// writes immediately on selection.
+// and pushed back through the `date` binding. The timezone picker writes
+// immediately on selection.
+//
+// Binding-based so the same view can drive either single-image edits
+// (binding derives from EditStore via AppState) or batch master-image
+// edits (binding still derives from EditStore but for the masterID).
 
 private enum DateField: Hashable {
     case year, month, day, hour, minute, second
 }
 
 struct DateEditor: View {
-    @Environment(AppState.self) private var state
+    @Binding var date: Date?
+    @Binding var timezone: TZRule
 
     @State private var year: String = ""
     @State private var month: String = ""
@@ -44,8 +49,9 @@ struct DateEditor: View {
 
             tzPicker
         }
-        .onAppear { seedFromRecord() }
-        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
+        .onAppear { seedFromBinding() }
+        .onChange(of: date) { _, _ in seedFromBinding() }
+        .onChange(of: timezone) { _, _ in seedFromBinding() }
         .onChange(of: focusedField) { oldValue, _ in
             // Commit whenever a segment loses focus. Multiple commits as
             // the user tabs through is fine -- the dirty tracker's
@@ -109,8 +115,7 @@ struct DateEditor: View {
     }
 
     private var currentTZLabel: String {
-        guard let rule = state.selectedRecord?.timezone else { return TZOptions.auto }
-        return TZOptions.label(for: rule)
+        TZOptions.label(for: timezone)
     }
 
     // MARK: - Mutations
@@ -118,52 +123,37 @@ struct DateEditor: View {
     // Build a Date from the current six segments interpreted in the
     // record's TZ. No-op if any segment fails to parse or the combination
     // is invalid (Feb 30, etc.) -- the local @State stays as the user
-    // typed it; the record's captureDate is unchanged.
+    // typed it; the bound date is unchanged.
     private func commitDate() {
-        guard let id = state.selectedID,
-              let record = state.selectedRecord else { return }
-
         guard let y = Int(year), let m = Int(month), let d = Int(day),
               let hh = Int(hour), let mm = Int(minute), let ss = Int(second) else {
             return
         }
 
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = displayTimeZone(record.timezone)
+        cal.timeZone = displayTimeZone(timezone)
         let comps = DateComponents(year: y, month: m, day: d,
                                    hour: hh, minute: mm, second: ss)
-        guard let date = cal.date(from: comps) else { return }
-
-        state.updateField(id: id, field: .captureDate) { rec in
-            rec.captureDate = date
-        }
+        guard let built = cal.date(from: comps) else { return }
+        date = built
     }
 
     private func selectTimezone(identifier: String) {
-        guard let id = state.selectedID,
-              let record = state.selectedRecord else { return }
-        let newRule = TZOptions.rule(for: identifier, at: record.captureDate)
+        let newRule = TZOptions.rule(for: identifier, at: date)
         // Always assign -- the displayed label has to reflect the user's
         // pick even when the offset is unchanged. EditableField's tz
         // comparator ignores labels so this won't false-positive as dirty.
-        state.updateField(id: id, field: .timezone) { rec in
-            rec.timezone = newRule
-        }
+        timezone = newRule
         // Re-seed the segment text -- if the wall-clock interpretation
         // shifted, the segments should reflect the new view.
-        seedFromRecord()
+        seedFromBinding()
     }
 
     // MARK: - Seeding
 
-    private func seedFromRecord() {
-        guard let record = state.selectedRecord else {
-            year = ""; month = ""; day = ""
-            hour = ""; minute = ""; second = ""
-            return
-        }
-        let zone = displayTimeZone(record.timezone)
-        let parts = decompose(record.captureDate, in: zone)
+    private func seedFromBinding() {
+        let zone = displayTimeZone(timezone)
+        let parts = decompose(date, in: zone)
         year   = parts.year.map { String(format: "%04d", $0) } ?? ""
         month  = parts.month.map { String(format: "%02d", $0) } ?? ""
         day    = parts.day.map { String(format: "%02d", $0) } ?? ""

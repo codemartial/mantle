@@ -125,6 +125,13 @@ struct StatusBar: View {
     }
 
     private var selectionSummary: String {
+        if state.batchMode {
+            let n = state.batchOrder.count
+            if let master = state.library.first(where: { $0.id == state.masterID })?.basename {
+                return "\(n) selected  -  master = \(master)"
+            }
+            return "\(n) selected"
+        }
         guard let entry = state.selectedEntry else { return "no selection" }
         if let record = state.selectedRecord, record.size > 0 {
             return "\(entry.displayURL.lastPathComponent)  -  \(ByteSize.format(record.size))"

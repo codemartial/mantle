@@ -59,12 +59,15 @@ final class SaveCoordinator {
 
     // Called by AppState after every store mutation. Surfaces dirty count
     // as .unsaved on the status pill -- but only if we're not currently
-    // in .saving / .saved / .failed (those have priority).
+    // in .saving / .saved / .failed (those have priority). Includes the
+    // pending batch-draft count (what synthesizeBatch WOULD dirty) so the
+    // pill reflects user-visible pending work, not just what has reached
+    // EditStore.
     func dirtyChanged() {
         guard let state else { return }
         switch state.status {
         case .idle, .unsaved:
-            let n = state.edits.totalDirtyCount
+            let n = state.edits.totalDirtyCount + state.pendingBatchEditCount
             state.status = n == 0 ? .idle : .unsaved(count: n)
         default:
             break
@@ -146,7 +149,7 @@ final class SaveCoordinator {
             guard !Task.isCancelled, let self else { return }
             guard let state = self.state else { return }
             if case .saved = state.status {
-                let n = state.edits.totalDirtyCount
+                let n = state.edits.totalDirtyCount + state.pendingBatchEditCount
                 state.status = n == 0 ? .idle : .unsaved(count: n)
             }
         }

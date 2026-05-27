@@ -34,12 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    // Quit-time: flush every dirty image to its sidecar before AppKit
-    // actually terminates. Returning .later defers termination while we
-    // run the async flush; reply(...) lets AppKit proceed when done.
+    // Quit-time: synthesize any in-flight batch draft into per-image edits,
+    // then flush every dirty image to its sidecar before AppKit actually
+    // terminates. Returning .later defers termination while we run the
+    // async flush; reply(...) lets AppKit proceed when done.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let stateRef else { return .terminateNow }
         Task { @MainActor in
+            stateRef.exitBatch(selecting: nil)
             await stateRef.saver.flushAll()
             NSApp.reply(toApplicationShouldTerminate: true)
         }

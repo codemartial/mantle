@@ -8,9 +8,15 @@ import SwiftUI
 struct ThumbnailCell: View {
     let entry: LibraryEntry
     let isSelected: Bool
+    // 1-based position in batchOrder. nil when not in batch mode (or not a
+    // batch member). Index 1 = master.
+    var batchIndex: Int? = nil
     let cache: ThumbnailCache
 
     @State private var image: NSImage?
+
+    private var isMaster: Bool { batchIndex == 1 }
+    private var isBatchMember: Bool { batchIndex != nil }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -53,8 +59,11 @@ struct ThumbnailCell: View {
                 }
             }
 
-            // Selection / format badge
-            if isSelected {
+            // Selection / batch / format badge
+            if isBatchMember {
+                batchBadge
+                    .padding(4)
+            } else if isSelected {
                 selectionBadge
                     .padding(4)
             } else if entry.format == "RAW + JPEG" || entry.format == "RAW" {
@@ -66,10 +75,7 @@ struct ThumbnailCell: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(
-                    isSelected ? Theme.accent : Color.clear,
-                    lineWidth: 1.5
-                )
+                .strokeBorder(strokeColor, lineWidth: strokeWidth)
         )
         .contentShape(Rectangle())
         .task(id: entry.displayURL) {
@@ -93,6 +99,40 @@ struct ThumbnailCell: View {
                 .foregroundStyle(Theme.accentFg)
         }
         .frame(width: 18, height: 18)
+    }
+
+    // Batch position. Master (index 1) gets a slightly larger badge with an
+    // "M" glyph; the rest show the 1-based order number.
+    private var batchBadge: some View {
+        ZStack {
+            Circle().fill(Theme.accent)
+            Group {
+                if isMaster {
+                    Text("M")
+                        .font(Typo.size(10, weight: .bold))
+                } else if let idx = batchIndex {
+                    Text(String(idx))
+                        .font(Typo.size(10, weight: .bold, design: .monospaced))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(Theme.accentFg)
+        }
+        .frame(width: isMaster ? 22 : 20, height: isMaster ? 22 : 20)
+    }
+
+    private var strokeColor: Color {
+        if isMaster { return Theme.accent }
+        if isBatchMember { return Theme.accent.opacity(0.7) }
+        if isSelected { return Theme.accent }
+        return .clear
+    }
+
+    private var strokeWidth: CGFloat {
+        if isMaster { return 2 }
+        if isBatchMember { return 1.5 }
+        if isSelected { return 1.5 }
+        return 0
     }
 
     private var formatBadge: some View {

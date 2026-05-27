@@ -31,6 +31,16 @@ struct RootView: View {
         .acceptingFolderDrop { url in
             state.openFolder(url)
         }
+        // Esc collapses an in-progress batch: synthesize + save all dirty,
+        // then land on the master. No-op when not in batch.
+        .focusable()
+        .onKeyPress(.escape) {
+            if state.batchMode {
+                state.exitBatch(selecting: state.masterID)
+                return .handled
+            }
+            return .ignored
+        }
     }
 }
 
@@ -69,9 +79,15 @@ private struct ThreePane: View {
 
                 hairline()
 
-                MetadataPane()
-                    .frame(width: rightWidth)
-                    .background(Theme.bgPanel)
+                if state.batchMode {
+                    MetaPanelBatch()
+                        .frame(width: rightWidth)
+                        .background(Theme.bgPanel)
+                } else {
+                    MetadataPane()
+                        .frame(width: rightWidth)
+                        .background(Theme.bgPanel)
+                }
             }
             .frame(width: totalWidth, height: geo.size.height)
         }
@@ -93,6 +109,10 @@ private struct CenterPane: View {
             if state.folderURL == nil {
                 EmptyStateView(onOpen: openFolder)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if state.batchMode {
+                BatchCenter()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                BatchCaptionBlock()
             } else {
                 PreviewPane()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

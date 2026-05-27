@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct BrowserPane: View {
     @Environment(AppState.self) private var state
@@ -27,16 +28,29 @@ struct BrowserPane: View {
                 ForEach(state.library) { entry in
                     ThumbnailCell(
                         entry: entry,
-                        isSelected: state.selectedID == entry.id,
+                        isSelected: !state.batchMode && state.selectedID == entry.id,
+                        batchIndex: batchIndex(for: entry.id),
                         cache: state.thumbs
                     )
                     .onTapGesture {
-                        state.select(entry.id)
+                        let mods = NSEvent.modifierFlags
+                        if mods.contains(.shift) {
+                            state.selectRange(to: entry.id)
+                        } else if mods.contains(.command) {
+                            state.toggleBatch(entry.id)
+                        } else {
+                            state.select(entry.id)
+                        }
                     }
                 }
             }
             .padding(8)
         }
+    }
+
+    private func batchIndex(for id: String) -> Int? {
+        guard state.batchMode else { return nil }
+        return state.batchOrder.firstIndex(of: id).map { $0 + 1 }
     }
 
     private func placeholder(_ text: String) -> some View {

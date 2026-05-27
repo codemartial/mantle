@@ -120,7 +120,22 @@ struct MetadataPane: View {
     private var capturedSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader("Captured")
-            DateEditor()
+            DateEditor(
+                date: Binding(
+                    get: { state.selectedRecord?.captureDate },
+                    set: { newDate in
+                        guard let id = state.selectedID, let newDate else { return }
+                        state.updateField(id: id, field: .captureDate) { $0.captureDate = newDate }
+                    }
+                ),
+                timezone: Binding(
+                    get: { state.selectedRecord?.timezone ?? .unknown },
+                    set: { newTz in
+                        guard let id = state.selectedID else { return }
+                        state.updateField(id: id, field: .timezone) { $0.timezone = newTz }
+                    }
+                )
+            )
         }
     }
 
@@ -156,7 +171,22 @@ struct MetadataPane: View {
                         .strokeBorder(Theme.line1, lineWidth: 0.5)
                 )
 
-            GeoCells()
+            GeoCells(
+                lat: Binding(
+                    get: { state.selectedRecord?.latitude },
+                    set: { newLat in
+                        guard let id = state.selectedID else { return }
+                        state.updateLocation(id: id, lat: newLat, lon: state.selectedRecord?.longitude)
+                    }
+                ),
+                lon: Binding(
+                    get: { state.selectedRecord?.longitude },
+                    set: { newLon in
+                        guard let id = state.selectedID else { return }
+                        state.updateLocation(id: id, lat: state.selectedRecord?.latitude, lon: newLon)
+                    }
+                )
+            )
 
             placeLine
         }

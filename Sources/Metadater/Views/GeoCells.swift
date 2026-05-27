@@ -4,9 +4,15 @@ import SwiftUI
 // that contains a recognisable coordinate pair (decimal or DMS) fills both
 // cells in one shot. Hemisphere chars are read-only labels driven by the
 // sign of the underlying value; to flip them, the user types a leading "-".
+//
+// Binding-based: lat / lon bindings are the source of truth. Internal
+// @State keeps display text and a local Double copy so typing doesn't get
+// round-tripped through formatCoord. External mutations (pin drag, image
+// switch) propagate via .onChange(of: lat / lon).
 
 struct GeoCells: View {
-    @Environment(AppState.self) private var state
+    @Binding var lat: Double?
+    @Binding var lon: Double?
 
     @State private var latitude: Double? = nil
     @State private var longitude: Double? = nil
@@ -24,19 +30,18 @@ struct GeoCells: View {
                     other: $latitude,
                     isLat: false)
         }
-        .onAppear { seedFromRecord() }
-        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in seedFromRecord() }
-        // Pin-drag and other external mutations land here. Skip if the
-        // record value matches our local copy (i.e. the change came from
-        // our own pushToState), so typing in one cell doesn't get its
-        // neighbour overwritten while focused.
-        .onChange(of: state.selectedRecord?.latitude) { _, new in
+        .onAppear { seedFromBinding() }
+        // External mutations land here. Skip if the bound value matches our
+        // local copy (i.e. the change came from our own pushToBinding), so
+        // typing in one cell doesn't get its neighbour overwritten while
+        // focused.
+        .onChange(of: lat) { _, new in
             if !Self.coordsClose(latitude, new) {
                 latitude = new
                 latText = Self.formatCoord(new)
             }
         }
-        .onChange(of: state.selectedRecord?.longitude) { _, new in
+        .onChange(of: lon) { _, new in
             if !Self.coordsClose(longitude, new) {
                 longitude = new
                 lonText = Self.formatCoord(new)
@@ -59,10 +64,9 @@ struct GeoCells: View {
 
     // MARK: - Seed / format
 
-    private func seedFromRecord() {
-        let r = state.selectedRecord
-        latitude = r?.latitude
-        longitude = r?.longitude
+    private func seedFromBinding() {
+        latitude = lat
+        longitude = lon
         latText = Self.formatCoord(latitude)
         lonText = Self.formatCoord(longitude)
     }
@@ -73,14 +77,14 @@ struct GeoCells: View {
         } else {
             lonText = Self.formatCoord(longitude)
         }
-        pushToState()
+        pushToBinding()
     }
 
     // Single entry point for write-back. Both a cell commit and a paste
     // (which can fill both cells at once) end up here.
-    private func pushToState() {
-        guard let id = state.selectedRecord?.id else { return }
-        state.updateLocation(id: id, lat: latitude, lon: longitude)
+    private func pushToBinding() {
+        lat = latitude
+        lon = longitude
     }
 
     static func formatCoord(_ value: Double?) -> String {
