@@ -20,3 +20,6 @@ dist/
 
 # Vendored ExifTool, fetched on demand by scripts/ensure-exiftool.sh
 Sources/Mantle/Resources/exiftool/
+
+# Ignore design handoff artifacts
+Metadater*.zip
