@@ -4,6 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+"$(dirname "$0")/ensure-exiftool.sh"
+
 CONFIG="${CONFIG:-release}"
 APP="dist/Mantle.app"
 BIN_NAME="Mantle"
