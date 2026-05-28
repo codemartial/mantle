@@ -7,7 +7,7 @@ import os.log
 // embedded metadata when both paths are passed, so the precedence falls
 // out naturally for the six owned fields.
 
-private let log = Logger(subsystem: "dev.metadater", category: "sidecar")
+private let log = Logger(subsystem: "com.tahirhashmi.mantle", category: "sidecar")
 
 enum SidecarIO {
 

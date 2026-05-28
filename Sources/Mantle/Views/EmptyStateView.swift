@@ -11,11 +11,11 @@ struct EmptyStateView: View {
                 dashedIcon
 
                 VStack(spacing: 6) {
-                    Text("Point Metadater at a folder of images")
+                    Text("Point Mantle at a folder of images")
                         .font(.system(size: 14 * 1.15, weight: .semibold))
                         .foregroundStyle(Theme.fg)
 
-                    Text("Drag any folder onto the window, or use Cmd+O to choose one.\nMetadater reads EXIF, IPTC and XMP from each image and writes your\nedits to a .xmp sidecar alongside the original -- RAW files are never\nmodified.")
+                    Text("Drag any folder onto the window, or use Cmd+O to choose one. Mantle reads EXIF, IPTC and XMP from each image and writes your edits to a .xmp sidecar alongside the original -- RAW files are never modified.")
                         .font(.system(size: 12 * 1.15))
                         .foregroundStyle(Theme.fgDim)
                         .multilineTextAlignment(.center)

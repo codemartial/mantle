@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let log = Logger(subsystem: "dev.metadater", category: "writer")
+private let log = Logger(subsystem: "com.tahirhashmi.mantle", category: "writer")
 
 // Writes only the fields the caller asks for to a bare-basename `.xmp`
 // sidecar next to the image. One ExifTool invocation per save -- no

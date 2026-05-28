@@ -3,7 +3,7 @@ import CoreGraphics
 import ImageIO
 import os.log
 
-private let scanLog = Logger(subsystem: "dev.metadater", category: "scan")
+private let scanLog = Logger(subsystem: "com.tahirhashmi.mantle", category: "scan")
 
 // One-level folder scan, RAW+JPEG basename pairing, sidecar association.
 // Bare foo.xmp wins over foo.NEF.xmp when both exist for the same basename.

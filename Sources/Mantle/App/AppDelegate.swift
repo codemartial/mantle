@@ -1,10 +1,11 @@
-import AppKit
+@preconcurrency import AppKit
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var aligners: [TrafficLightAligner] = []
-    private var becameMainToken: NSObjectProtocol?
-    // Weak ref so the AppState owned by MetadaterApp can drive the
-    // terminate-flush handshake. Set from MetadaterApp's .task.
+    private var becameMainTask: Task<Void, Never>?
+    // Weak ref so the AppState owned by MantleApp can drive the
+    // terminate-flush handshake. Set from MantleApp's .task.
     weak var stateRef: AppState?
 
     @MainActor
@@ -20,13 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             attachAligner(to: window)
         }
 
-        becameMainToken = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeMainNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let self, let window = note.object as? NSWindow else { return }
-            self.attachAligner(to: window)
+        // Async-sequence notification API: the for-await body inherits this
+        // method's MainActor isolation, so there's no @Sendable closure to
+        // bridge across. The task is held for the app's lifetime.
+        becameMainTask = Task { [weak self] in
+            for await note in NotificationCenter.default.notifications(named: NSWindow.didBecomeMainNotification) {
+                guard let self, let window = note.object as? NSWindow else { continue }
+                self.attachAligner(to: window)
+            }
         }
     }
 
@@ -76,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // to an absolute target each time AppKit re-lays them out. Idempotent --
 // repeated calls converge on the same position regardless of how many
 // notifications fire between AppKit's re-layouts.
+@MainActor
 final class TrafficLightAligner {
     weak var window: NSWindow?
     private let targetOriginY: CGFloat
@@ -101,7 +104,9 @@ final class TrafficLightAligner {
                 object: window,
                 queue: .main
             ) { [weak self] _ in
-                self?.realign()
+                MainActor.assumeIsolated {
+                    self?.realign()
+                }
             }
             observers.append(token)
         }

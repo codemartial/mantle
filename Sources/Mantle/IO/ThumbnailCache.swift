@@ -13,10 +13,10 @@ import os.log
 // blocking semaphore on GCD threads is safe (each GCD thread is independent
 // of the Swift cooperative pool, so blocking doesn't starve it).
 
-private let thumbLog = Logger(subsystem: "dev.metadater", category: "thumb")
+private let thumbLog = Logger(subsystem: "com.tahirhashmi.mantle", category: "thumb")
 
 private let thumbQueue = DispatchQueue(
-    label: "dev.metadater.thumbs",
+    label: "com.tahirhashmi.mantle.thumbs",
     qos: .userInitiated,
     attributes: .concurrent
 )

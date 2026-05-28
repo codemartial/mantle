@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os.log
 
-private let log = Logger(subsystem: "dev.metadater", category: "save")
+private let log = Logger(subsystem: "com.tahirhashmi.mantle", category: "save")
 
 // Per-id save serialiser with trailing-edge dedup. A save request for an
 // id that already has one in flight sets a `pending` bit instead of

@@ -5,13 +5,19 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>Metadater</string>
+    <string>Mantle</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.metadater.app</string>
+    <string>com.tahirhashmi.mantle</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© __YEAR__ Tahir Hashmi</string>
+    <key>CFBundleIconFile</key>
+    <string>Mantle</string>
+    <key>CFBundleIconName</key>
+    <string>Mantle</string>
     <key>CFBundleName</key>
-    <string>Metadater</string>
+    <string>Mantle</string>
     <key>CFBundleDisplayName</key>
-    <string>Metadater</string>
+    <string>Mantle</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

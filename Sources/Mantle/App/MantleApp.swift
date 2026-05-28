@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct MetadaterApp: App {
+struct MantleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var state = AppState()
 

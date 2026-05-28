@@ -2,17 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "Metadater",
+    name: "Mantle",
     platforms: [
         .macOS(.v14),
     ],
     targets: [
         .executableTarget(
-            name: "Metadater",
-            path: "Sources/Metadater",
+            name: "Mantle",
+            path: "Sources/Mantle",
             exclude: [
                 "Resources/Info.plist",
-                "Resources/Metadater.entitlements",
+                "Resources/Mantle.entitlements",
+                "Resources/Mantle.icns",
+                "Resources/Mantle.iconset",
+                "Resources/Credits.rtf",
             ],
             resources: [
                 .copy("Resources/exiftool"),
