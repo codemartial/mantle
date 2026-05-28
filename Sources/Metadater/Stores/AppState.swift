@@ -286,9 +286,14 @@ final class AppState {
                     }
                 }
             case .append:
-                if !draft.captionAppend.isEmpty {
+                let trimmedAppend = draft.captionAppend.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedAppend.isEmpty {
+                    let trimmedPrior = current.caption.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let merged = trimmedPrior.isEmpty
+                        ? trimmedAppend
+                        : trimmedPrior + "\n\n" + trimmedAppend
                     updateField(id: id, field: .caption) { rec in
-                        rec.caption = current.caption + draft.captionAppend
+                        rec.caption = merged
                     }
                 }
             }
@@ -448,7 +453,7 @@ final class AppState {
                     count += 1
                 }
             case .append:
-                if !draft.captionAppend.isEmpty {
+                if !draft.captionAppend.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     count += 1
                 }
             }

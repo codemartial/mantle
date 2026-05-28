@@ -153,11 +153,14 @@ private struct MapRepresentable: NSViewRepresentable {
         // click drops one at the click point. Once a pin exists the
         // recognizer no-ops (the user can drag the existing pin). NSClick-
         // GestureRecognizer auto-fails on movement, so pan still works.
+        // Delegate filters out clicks landing on MKMapView's own subviews
+        // (zoom +/-, compass) so they receive their mouseDown normally.
         let clickRecognizer = NSClickGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleClickToPlace(_:))
         )
         clickRecognizer.numberOfClicksRequired = 1
+        clickRecognizer.delegate = context.coordinator
         map.addGestureRecognizer(clickRecognizer)
 
         return map
@@ -198,7 +201,7 @@ private final class LocationPin: MKPointAnnotation {}
 
 // MARK: - Coordinator
 
-private final class Coordinator: NSObject, MKMapViewDelegate {
+private final class Coordinator: NSObject, MKMapViewDelegate, NSGestureRecognizerDelegate {
 
     var onDrag: (Double, Double) -> Void
     var onLayout: (ConeLayout?) -> Void
@@ -263,6 +266,18 @@ private final class Coordinator: NSObject, MKMapViewDelegate {
     @objc func mapFrameChanged(_ note: Notification) {
         guard let map = note.object as? MKMapView else { return }
         publishLayout(on: map)
+    }
+
+    // Don't intercept clicks that land on a map subview (zoom +/- controls,
+    // compass). Hit-test from the window's contentView so the traversal
+    // descends through MKMapView's full subview tree; only recognize when
+    // the deepest hit is the map view itself.
+    func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer,
+                           shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        guard let map = gestureRecognizer.view,
+              let contentView = event.window?.contentView else { return true }
+        let hit = contentView.hitTest(event.locationInWindow)
+        return hit === map
     }
 
     // Click anywhere on a pinless map to drop a pin at the click point.
