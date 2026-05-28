@@ -13,6 +13,11 @@ import SwiftUI
 struct GeoCells: View {
     @Binding var lat: Double?
     @Binding var lon: Double?
+    // Bump from outside to force a re-seed of local input state from the
+    // bindings -- used when a binding rejects a write (e.g. nil in batch
+    // master) and the wrappedValue itself didn't change, so the normal
+    // .onChange(of: lat / lon) wouldn't fire.
+    var reseedToken: Int = 0
 
     @State private var latitude: Double? = nil
     @State private var longitude: Double? = nil
@@ -46,6 +51,9 @@ struct GeoCells: View {
                 longitude = new
                 lonText = Self.formatCoord(new)
             }
+        }
+        .onChange(of: reseedToken) { _, _ in
+            seedFromBinding()
         }
     }
 
@@ -167,6 +175,15 @@ private struct GeoCell: View {
     // MARK: - Commit / paste
 
     private func commit() {
+        // Empty / whitespace-only field is the user's way to scrub the
+        // coord back to nil. The writer emits blank XMP-exif tags for nil
+        // lat/lon to clear any existing GPS in the sidecar.
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            value = nil
+            onCommit()
+            return
+        }
         guard let parsed = CoordParser.parseSingle(text) else {
             onCommit()
             return
@@ -187,12 +204,24 @@ private struct GeoCell: View {
     private func applyPaste(_ raw: String) {
         guard let parsed = CoordParser.parse(raw) else { return }
         if let pair = parsed.pair {
+            // Pair already has the hemispheres baked into the signs by the
+            // parser (N/S/E/W markers, explicit "-", etc.), so honour them.
             value = isLat ? pair.lat : pair.lon
             other = isLat ? pair.lon : pair.lat
             text = GeoCells.formatCoord(value)
         } else if let single = parsed.single {
-            value = single
-            text = GeoCells.formatCoord(single)
+            // Single magnitude paste: mirror commit()'s sign preservation,
+            // since the text field is unsigned by design (N/S/E/W labels
+            // carry the hemisphere). Without this the cell read as the
+            // pasted magnitude only, silently flipping the hemisphere.
+            // An explicit negative paste still flips, since the parser
+            // returns the negative through.
+            if single < 0 {
+                value = single
+            } else {
+                value = (value ?? 0) < 0 ? -abs(single) : abs(single)
+            }
+            text = GeoCells.formatCoord(value)
         }
         onCommit()
     }

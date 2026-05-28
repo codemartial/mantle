@@ -81,8 +81,22 @@ enum SidecarIO {
 
         // We need GPS up front because the TZRule .auto case implies "GPS
         // resolves it" -- claiming Auto on a file without GPS is wrong.
-        let lat = parseGPS(json["Composite:GPSLatitude"])  ?? parseGPS(json["XMP-exif:GPSLatitude"])
-        let lon = parseGPS(json["Composite:GPSLongitude"]) ?? parseGPS(json["XMP-exif:GPSLongitude"])
+        // Hemisphere comes from the explicit Ref tag whenever it's present,
+        // because the raw magnitude tag's format varies (DMS-with-suffix,
+        // bare decimal, numeric, etc.) and a bare decimal would silently
+        // drop the sign through parseGPS's Double()-fallback.
+        let lat = readSignedGPS(json: json,
+                                magnitudeKeys: ["XMP-exif:GPSLatitude", "EXIF:GPSLatitude"],
+                                refKeys: ["XMP-exif:GPSLatitudeRef", "EXIF:GPSLatitudeRef",
+                                          "Composite:GPSLatitudeRef"],
+                                compositeKey: "Composite:GPSLatitude",
+                                negativeHemispheres: ["S"])
+        let lon = readSignedGPS(json: json,
+                                magnitudeKeys: ["XMP-exif:GPSLongitude", "EXIF:GPSLongitude"],
+                                refKeys: ["XMP-exif:GPSLongitudeRef", "EXIF:GPSLongitudeRef",
+                                          "Composite:GPSLongitudeRef"],
+                                compositeKey: "Composite:GPSLongitude",
+                                negativeHemispheres: ["W"])
         let hasGPS = (lat != nil) && (lon != nil)
 
         let tzRule: TZRule = {
@@ -332,6 +346,45 @@ private func firstDateIn(_ d: [String: Any], keys: [String], timezone: TimeZone)
         }
     }
     return nil
+}
+
+/// Read a signed GPS coordinate, preferring the explicit Ref tag over any
+/// sign hint that may or may not be baked into the magnitude string. Falls
+/// back to the Composite tag only when no ref + magnitude pair is found.
+///
+/// Why this matters: ExifTool's output format for the magnitude varies by
+/// version, file type, and how the tag was originally written. The raw
+/// magnitude can come back as a DMS string with a trailing N/S/E/W (which
+/// parseGPS handles), but it can also come back as a bare decimal -- and a
+/// bare positive decimal silently means "north / east" via parseGPS's
+/// Double-init path, even when the real value was south or west. The Ref
+/// tag is the one place ExifTool always reports the hemisphere reliably.
+private func readSignedGPS(json: [String: Any],
+                           magnitudeKeys: [String],
+                           refKeys: [String],
+                           compositeKey: String,
+                           negativeHemispheres: Set<String>) -> Double? {
+    let refLetter: String? = {
+        for k in refKeys {
+            if let s = json[k] as? String, let first = s.uppercased().first {
+                return String(first)
+            }
+        }
+        return nil
+    }()
+
+    if let ref = refLetter {
+        for k in magnitudeKeys {
+            if let mag = parseGPS(json[k]) {
+                let sign: Double = negativeHemispheres.contains(ref) ? -1 : 1
+                return sign * abs(mag)
+            }
+        }
+    }
+
+    // No ref tag (or no magnitude under the expected keys) -- fall back to
+    // the Composite tag, which usually embeds the hemisphere as a letter.
+    return parseGPS(json[compositeKey])
 }
 
 /// Parses ExifTool's Composite:GPSLatitude / GPSLongitude string format

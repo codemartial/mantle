@@ -227,6 +227,14 @@ struct MetaPanelBatch: View {
                     get: { state.masterRecord?.latitude },
                     set: { newLat in
                         guard let id = state.masterID else { return }
+                        // Batch semantics: nil = no-op (matches the multi-
+                        // edit blank-no-modify rule for all draft fields).
+                        // Bump the reseed token so GeoCells snaps its
+                        // cleared text back to master's actual value.
+                        guard let newLat else {
+                            state.geoReseedTick += 1
+                            return
+                        }
                         state.updateLocation(id: id, lat: newLat, lon: state.masterRecord?.longitude)
                     }
                 ),
@@ -234,12 +242,38 @@ struct MetaPanelBatch: View {
                     get: { state.masterRecord?.longitude },
                     set: { newLon in
                         guard let id = state.masterID else { return }
+                        guard let newLon else {
+                            state.geoReseedTick += 1
+                            return
+                        }
                         state.updateLocation(id: id, lat: state.masterRecord?.latitude, lon: newLon)
                     }
-                )
+                ),
+                reseedToken: state.geoReseedTick
             )
 
+            broadcastButtons
+
             locationsSummaryLine
+        }
+    }
+
+    private var broadcastButtons: some View {
+        HStack(spacing: 6) {
+            Button("Apply to all") {
+                state.applyMasterLocationToAll()
+            }
+            .controlSize(.small)
+            .disabled(state.masterRecord?.latitude == nil && state.masterRecord?.longitude == nil)
+            .help("Copy master's lat/lon onto every other selected image")
+
+            Button("Reset all from file") {
+                state.resetLocationFromEmbeddedForAllBatch()
+            }
+            .controlSize(.small)
+            .help("Re-read each image's embedded GPS into its sidecar (repairs hemisphere flips by trusting the camera's own EXIF)")
+
+            Spacer()
         }
     }
 

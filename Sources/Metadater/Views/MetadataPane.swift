@@ -188,6 +188,19 @@ struct MetadataPane: View {
                 )
             )
 
+            HStack(spacing: 6) {
+                Button("Reset from file") {
+                    if let id = state.selectedID {
+                        state.resetLocationFromEmbedded(id: id)
+                    }
+                }
+                .controlSize(.small)
+                .disabled(state.selectedID == nil)
+                .help("Re-read GPS from the image's embedded EXIF (repairs a sidecar whose hemisphere got flipped)")
+
+                Spacer()
+            }
+
             placeLine
         }
     }

@@ -149,6 +149,17 @@ private struct MapRepresentable: NSViewRepresentable {
             object: map
         )
 
+        // Click-to-place: when the current image has no pin yet, a plain
+        // click drops one at the click point. Once a pin exists the
+        // recognizer no-ops (the user can drag the existing pin). NSClick-
+        // GestureRecognizer auto-fails on movement, so pan still works.
+        let clickRecognizer = NSClickGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleClickToPlace(_:))
+        )
+        clickRecognizer.numberOfClicksRequired = 1
+        map.addGestureRecognizer(clickRecognizer)
+
         return map
     }
 
@@ -252,6 +263,18 @@ private final class Coordinator: NSObject, MKMapViewDelegate {
     @objc func mapFrameChanged(_ note: Notification) {
         guard let map = note.object as? MKMapView else { return }
         publishLayout(on: map)
+    }
+
+    // Click anywhere on a pinless map to drop a pin at the click point.
+    // Gated to pin == nil so the gesture doesn't interfere with the normal
+    // drag-existing-pin flow once a coordinate is set; to move an existing
+    // pin the user drags it.
+    @objc func handleClickToPlace(_ recognizer: NSClickGestureRecognizer) {
+        guard pin == nil else { return }
+        guard let map = recognizer.view as? MKMapView else { return }
+        let point = recognizer.location(in: map)
+        let coord = map.convert(point, toCoordinateFrom: map)
+        onDrag(coord.latitude, coord.longitude)
     }
 
     func applyRecenterIfNeeded(token: Int, on map: MKMapView, record: ImageRecord?) {

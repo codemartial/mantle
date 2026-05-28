@@ -190,24 +190,26 @@ enum ExifToolWriter {
         return ["-XMP-photoshop:DateCreated=\(formatISO8601(date, offsetMinutes: offsetMinutes))"]
     }
 
-    // Write XMP-exif lat/lon as unsigned magnitudes paired with explicit
-    // N/S/E/W Ref tags -- that's what SidecarIO.parseGPS reads back, so the
-    // round-trip lands cleanly. 7 decimal degrees ~= 1cm precision.
+    // Write XMP-exif lat/lon as SIGNED magnitudes. The XMP-exif schema
+    // bakes the hemisphere into the GPSLatitude / GPSLongitude value's
+    // suffix (e.g. "6,13.68S") -- there is no separately-writable
+    // XMP-exif:GPSLatitudeRef element. Passing the sign on the magnitude
+    // is what ExifTool uses to choose the right hemisphere suffix.
+    // (Passing a Ref= arg silently warns "doesn't exist or isn't writable"
+    // and is ignored, leaving the previous sidecar's hemisphere intact --
+    // that was the long-standing bug behind the south/west sign flips.)
+    // 7 decimal degrees ~= 1cm precision.
     private static func locationArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {
         guard fields.contains(.location) else { return [] }
         guard let lat = record.latitude, let lon = record.longitude else {
             return [
                 "-XMP-exif:GPSLatitude=",
                 "-XMP-exif:GPSLongitude=",
-                "-XMP-exif:GPSLatitudeRef=",
-                "-XMP-exif:GPSLongitudeRef=",
             ]
         }
         return [
-            String(format: "-XMP-exif:GPSLatitude=%.7f", abs(lat)),
-            String(format: "-XMP-exif:GPSLongitude=%.7f", abs(lon)),
-            "-XMP-exif:GPSLatitudeRef=\(lat >= 0 ? "N" : "S")",
-            "-XMP-exif:GPSLongitudeRef=\(lon >= 0 ? "E" : "W")",
+            String(format: "-XMP-exif:GPSLatitude=%.7f", lat),
+            String(format: "-XMP-exif:GPSLongitude=%.7f", lon),
         ]
     }
 

@@ -30,6 +30,13 @@ final class AppState {
     // off the right thing.
     var selectionAnchor: String?
 
+    // Bumped when a downstream binding refuses to write (e.g. nil location
+    // in batch mode). Views observing this token re-seed their local
+    // input state from the binding's current value -- the only way to
+    // visually snap a cleared cell back to its bound value when the
+    // binding's wrappedValue itself never changed.
+    var geoReseedTick: Int = 0
+
     var mapStyle: MapStyleChoice = MapStyleChoice.load() {
         didSet { mapStyle.save() }
     }
@@ -347,6 +354,58 @@ final class AppState {
     // the UI's intent is explicit in the call site.
     func promoteKeywordToAll(_ kw: String) {
         addKeywordToAll(kw)
+    }
+
+    // Re-read the file's embedded GPS (image only, sidecar ignored) and
+    // overwrite the in-memory location for that image. Useful for repairing
+    // a sidecar whose hemisphere got flipped by a past bug -- the embedded
+    // GPS in the parent file is the canonical source of truth. No-op when
+    // the file has no embedded GPS coords.
+    func resetLocationFromEmbedded(id: String) {
+        guard let entry = library.first(where: { $0.id == id }) else { return }
+        let entryURL = entry.displayURL
+        Task { [weak self] in
+            let embedded = await Task.detached(priority: .userInitiated) {
+                SidecarIO.read(file: entryURL, sidecar: nil)
+            }.value
+            guard let self else { return }
+            // Only apply if the file actually has embedded coords; otherwise
+            // we'd silently wipe a user-set location.
+            if embedded.latitude != nil || embedded.longitude != nil {
+                self.updateLocation(id: id, lat: embedded.latitude, lon: embedded.longitude)
+            } else {
+                self.debugLog.append("[reset] \(entry.basename): no embedded GPS")
+            }
+        }
+    }
+
+    // Batch variant -- re-read every batch member's own embedded GPS into
+    // its own record. Skips members whose parent files have no embedded GPS.
+    func resetLocationFromEmbeddedForAllBatch() {
+        guard batchMode else { return }
+        for id in batchOrder {
+            resetLocationFromEmbedded(id: id)
+        }
+    }
+
+    // Copy the master's current lat / lon onto every other batch member.
+    // No-op for master itself (already there). Saves are deferred to batch
+    // exit, same shape as the keyword broadcasts.
+    func applyMasterLocationToAll() {
+        guard batchMode, let master = masterRecord else { return }
+        let lat = master.latitude
+        let lon = master.longitude
+        var skipped = 0
+        for id in batchOrder where id != master.id {
+            guard edits.record(id) != nil else {
+                skipped += 1
+                continue
+            }
+            updateLocation(id: id, lat: lat, lon: lon)
+        }
+        if skipped > 0 {
+            debugLog.append("[batch] apply location skipped \(skipped) un-ingested image\(skipped == 1 ? "" : "s")")
+        }
     }
 
     // Common / some sets over the current batch. Common = present in every
