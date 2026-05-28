@@ -27,7 +27,6 @@ struct ImageRecord: Identifiable, Hashable, Sendable {
     var longitude: Double?
     let altitude: Double?
     let direction: Double?
-    let place: String
 
     var headline: String
     var caption: String

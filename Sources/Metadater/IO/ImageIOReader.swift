@@ -113,7 +113,6 @@ enum ImageIOReader {
             longitude: lon,
             altitude: alt,
             direction: dir,
-            place: "",
             headline: headline,
             caption: caption,
             keywords: keywords,

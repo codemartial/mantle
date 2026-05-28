@@ -150,19 +150,19 @@ struct MetadataPane: View {
             )
 
             HStack(spacing: 6) {
-                Button("Reset from file") {
+                Button("Reset") {
                     if let id = state.selectedID {
                         state.resetLocationFromEmbedded(id: id)
                     }
                 }
                 .controlSize(.small)
                 .disabled(state.selectedID == nil)
-                .help("Re-read GPS from the image's embedded EXIF (repairs a sidecar whose hemisphere got flipped)")
+                .help("Re-read GPS from the image's embedded EXIF")
 
                 Spacer()
-            }
 
-            placeLine
+                altitudeBadge(record?.altitude)
+            }
         }
     }
 
@@ -180,26 +180,16 @@ struct MetadataPane: View {
         .fixedSize()
     }
 
-    private var placeLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "mappin.circle")
-                .font(.system(size: 10 * 1.15))
-                .foregroundStyle(Theme.fgFaint)
-            Text(record?.place.isEmpty == false ? (record?.place ?? "") : "Location not resolved")
-                .font(.system(size: 11 * 1.15))
-                .foregroundStyle(record?.place.isEmpty == false ? Theme.fgMute : Theme.fgFaint)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer()
-            if let alt = record?.altitude {
-                HStack(spacing: 3) {
-                    Image(systemName: "triangle.fill")
-                        .font(.system(size: 7 * 1.15))
-                        .foregroundStyle(Theme.fgFaint)
-                    Text(String(format: "%.0f m", alt))
-                        .font(.system(size: 10 * 1.15, design: .monospaced))
-                        .foregroundStyle(Theme.fgDim)
-                }
+    @ViewBuilder
+    private func altitudeBadge(_ altitude: Double?) -> some View {
+        if let alt = altitude {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.to.line")
+                    .font(.system(size: 9 * 1.15, weight: .medium))
+                    .foregroundStyle(Theme.fgFaint)
+                Text(String(format: "%.0f m", alt))
+                    .font(.system(size: 10 * 1.15, design: .monospaced))
+                    .foregroundStyle(Theme.fgDim)
             }
         }
     }

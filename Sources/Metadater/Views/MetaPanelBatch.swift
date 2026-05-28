@@ -232,9 +232,20 @@ struct MetaPanelBatch: View {
                 state.resetLocationFromEmbeddedForAllBatch()
             }
             .controlSize(.small)
-            .help("Re-read each image's embedded GPS into its sidecar (repairs hemisphere flips by trusting the camera's own EXIF)")
+            .help("Re-read each image's embedded GPS into its sidecar")
 
             Spacer()
+
+            if let alt = state.masterRecord?.altitude {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.to.line")
+                        .font(.system(size: 9 * 1.15, weight: .medium))
+                        .foregroundStyle(Theme.fgFaint)
+                    Text(String(format: "%.0f m", alt))
+                        .font(.system(size: 10 * 1.15, design: .monospaced))
+                        .foregroundStyle(Theme.fgDim)
+                }
+            }
         }
     }
 
@@ -274,9 +285,7 @@ struct MetaPanelBatch: View {
         }
         let distinct = Set(locs).count
         if distinct <= 1 {
-            return state.masterRecord?.place.isEmpty == false
-                ? (state.masterRecord?.place ?? "")
-                : "Master location only"
+            return "Master location only"
         }
         let other = distinct - 1
         return "\(other) other location\(other == 1 ? "" : "s") in selection"
