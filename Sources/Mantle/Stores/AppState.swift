@@ -413,23 +413,43 @@ final class AppState {
         }
     }
 
-    // Set `tz` on the master and every other batch member. Unlike location
-    // (where per-image coords legitimately differ and broadcast is opt-in via
-    // a button), a batch shares one capture timezone, so the picker applies
-    // its value across the whole selection. Saves are deferred to batch exit.
+    // Set the capture timezone on the master and every other batch member.
+    // Unlike location (where per-image coords legitimately differ and
+    // broadcast is opt-in via a button), a batch shares one capture timezone,
+    // so the picker applies its value across the whole selection.
+    //
+    // The offset is re-resolved per image against that image's own capture
+    // date, so a batch straddling a DST change (e.g. shots on either side of
+    // a spring-forward) gets the right offset for each shot instead of the
+    // single offset that happened to be resolved for the master. Saves are
+    // deferred to batch exit.
     func applyTimezoneToAll(_ tz: TZRule) {
         guard batchMode else { return }
         var skipped = 0
         for id in batchOrder {
-            guard edits.record(id) != nil else {
+            guard let record = edits.record(id) else {
                 skipped += 1
                 continue
             }
-            updateField(id: id, field: .timezone) { $0.timezone = tz }
+            let resolved = timezoneResolved(tz, at: record.captureDate)
+            updateField(id: id, field: .timezone) { $0.timezone = resolved }
         }
         if skipped > 0 {
             debugLog.append("[batch] apply timezone skipped \(skipped) un-ingested image\(skipped == 1 ? "" : "s")")
         }
+    }
+
+    // Re-resolve a picked timezone's offset against a specific capture date so
+    // DST is honoured per image. The picker stores the IANA zone id as the
+    // .fixed label, which we re-resolve here. Everything else passes through
+    // unchanged: .auto / .unknown carry no offset, a .fixed whose label isn't
+    // a zone id (e.g. a raw offset read from disk) has no zone to re-resolve,
+    // and a date-less image has nothing to resolve against.
+    private func timezoneResolved(_ tz: TZRule, at date: Date?) -> TZRule {
+        guard let date,
+              case .fixed(_, let label) = tz,
+              TimeZone(identifier: label) != nil else { return tz }
+        return TZOptions.rule(for: label, at: date)
     }
 
     // Common / some sets over the current batch. Common = present in every
