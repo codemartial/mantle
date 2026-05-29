@@ -189,8 +189,36 @@ enum ExifToolOneShot {
 
     // MARK: - Bundle resource lookup
 
+    // The SPM-generated `Bundle.module` accessor only probes
+    // `Bundle.main.bundleURL/Mantle_Mantle.bundle` and *fatalErrors* on a
+    // miss. That path holds for `swift run` (the bundle sits next to the
+    // binary) but not for the packaged .app, where bundleURL is the .app
+    // root and build-app.sh installs the bundle under Contents/Resources --
+    // so the first metadata read used to trap. We resolve the resource
+    // bundle ourselves across the real candidate locations and return nil
+    // (callers handle it) instead of crashing.
+    private static let resourceBundle: Bundle? = {
+        let bundleName = "Mantle_Mantle.bundle"
+        var bases: [URL] = []
+        if let r = Bundle.main.resourceURL { bases.append(r) }   // .app/Contents/Resources
+        bases.append(Bundle.main.bundleURL)                      // .app root, or dev bin dir
+        if let exe = Bundle.main.executableURL?.deletingLastPathComponent() {
+            bases.append(exe)                                    // .app/Contents/MacOS
+        }
+        for base in bases {
+            if let bundle = Bundle(url: base.appendingPathComponent(bundleName)) {
+                return bundle
+            }
+        }
+        return nil
+    }()
+
+    private static func exiftoolResourceDir() -> URL? {
+        resourceBundle?.url(forResource: "exiftool", withExtension: nil)
+    }
+
     static func exiftoolBinaryURL() -> URL? {
-        guard let dir = Bundle.module.url(forResource: "exiftool", withExtension: nil) else {
+        guard let dir = exiftoolResourceDir() else {
             return nil
         }
         let exe = dir.appendingPathComponent("exiftool")
@@ -198,7 +226,7 @@ enum ExifToolOneShot {
     }
 
     static func exiftoolLibURL() -> URL? {
-        guard let dir = Bundle.module.url(forResource: "exiftool", withExtension: nil) else {
+        guard let dir = exiftoolResourceDir() else {
             return nil
         }
         let lib = dir.appendingPathComponent("lib")
