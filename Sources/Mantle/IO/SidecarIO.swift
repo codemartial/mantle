@@ -478,9 +478,9 @@ private func extractISOOffset(_ s: String) -> String {
 }
 
 /// Parses an offset string like `-08:00` or `+05:30` into a TZRule.
-/// Label format follows the design directive:
-///   `UTC+HH:MM - Auto`   when no place name is known
-///   `UTC+HH:MM - <place>`  when a place name was extracted
+/// The label carries the best-effort place name (may be empty or junk); the
+/// offset shown in the UI is derived from offsetMinutes, and the display
+/// layer reduces an empty/junk place down to the bare offset.
 /// Returns nil for empty / malformed input so callers can fall back.
 private func parseOffsetRule(_ offset: String, place: String) -> TZRule? {
     let trimmed = offset.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -502,7 +502,5 @@ private func parseOffsetRule(_ offset: String, place: String) -> TZRule? {
         return v
     }()
     let total = sign * (hours * 60 + minutes)
-    let suffix = place.isEmpty ? "Auto" : place
-    let label = String(format: "UTC%@%02d:%02d - %@", sign < 0 ? "-" : "+", abs(hours), minutes, suffix)
-    return .fixed(offsetMinutes: total, label: label)
+    return .fixed(offsetMinutes: total, label: place)
 }

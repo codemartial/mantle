@@ -261,13 +261,36 @@ enum TZOptions {
         return joined.isEmpty ? identifier : joined
     }
 
-    // Label rendered in the picker's button. .auto / .unknown -> "Auto";
-    // .fixed shows whatever the rule stored (typically the IANA id).
+    // Label rendered in the picker's button. .auto / .unknown -> "Auto".
+    // .fixed shows the bare offset ("UTC+11:00"), or "<place> (UTC+11:00)"
+    // when a real place name is available. The offset is always derived from
+    // the stored minutes so it stays the source of truth; the place is a
+    // cosmetic anchor that falls away when it's empty or junk (no letters).
     static func label(for rule: TZRule) -> String {
         switch rule {
-        case .unknown, .auto:        return auto
-        case .fixed(_, let label):   return label
+        case .unknown, .auto:
+            return auto
+        case .fixed(let mins, let label):
+            let offset = offsetString(mins)
+            let name = placeName(from: label)
+            return name.isEmpty ? offset : "\(name) (\(offset))"
         }
+    }
+
+    // "UTC+HH:MM" / "UTC-HH:MM" from signed minutes.
+    private static func offsetString(_ minutes: Int) -> String {
+        let m = abs(minutes)
+        return String(format: "UTC%@%02d:%02d", minutes < 0 ? "-" : "+", m / 60, m % 60)
+    }
+
+    // The .fixed label is either an IANA id picked from the menu
+    // ("Australia/Melbourne") or a bare place hint recovered from the file
+    // ("Melbourne"). Reduce an IANA id to its city, and require at least one
+    // letter so numeric junk (e.g. "7") falls back to the offset alone.
+    private static func placeName(from label: String) -> String {
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        guard trimmed.contains(where: { $0.isLetter }) else { return "" }
+        return trimmed.contains("/") ? cityDisplay(trimmed) : trimmed
     }
 
     // Convert a user pick into a TZRule. "Auto" -> .auto. Otherwise

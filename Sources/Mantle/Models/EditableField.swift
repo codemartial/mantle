@@ -80,9 +80,9 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         }
     }
 
-    // TZRule.fixed carries a `label` cosmetic suffix ("UTC-08:00 - PST")
-    // that the UI may regenerate slightly differently from what the
-    // sidecar produced on load. Compare offsets, ignore labels.
+    // TZRule.fixed carries a cosmetic `label` (a place name or IANA zone id)
+    // that the UI may regenerate differently from what the sidecar produced
+    // on load. Compare offsets, ignore labels.
     private static func timezoneEqual(_ x: TZRule, _ y: TZRule) -> Bool {
         switch (x, y) {
         case (.unknown, .unknown), (.auto, .auto): return true
