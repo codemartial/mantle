@@ -413,6 +413,25 @@ final class AppState {
         }
     }
 
+    // Set `tz` on the master and every other batch member. Unlike location
+    // (where per-image coords legitimately differ and broadcast is opt-in via
+    // a button), a batch shares one capture timezone, so the picker applies
+    // its value across the whole selection. Saves are deferred to batch exit.
+    func applyTimezoneToAll(_ tz: TZRule) {
+        guard batchMode else { return }
+        var skipped = 0
+        for id in batchOrder {
+            guard edits.record(id) != nil else {
+                skipped += 1
+                continue
+            }
+            updateField(id: id, field: .timezone) { $0.timezone = tz }
+        }
+        if skipped > 0 {
+            debugLog.append("[batch] apply timezone skipped \(skipped) un-ingested image\(skipped == 1 ? "" : "s")")
+        }
+    }
+
     // Common / some sets over the current batch. Common = present in every
     // image; some = present in at least one but not all. Both case-sensitive
     // for display (matching the single-mode case-sensitive on-disk shape).

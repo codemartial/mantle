@@ -8,8 +8,10 @@ import SwiftUI
 //   Keywords           -- common + some chips
 //
 // "Captured (master)" and "Location (master)" edit the master image's
-// stored record directly (same path as single-mode). The DateShift control
-// goes through batchDraft and is applied to every image at exitBatch().
+// stored record directly (same path as single-mode), except the timezone
+// picker broadcasts its value across the whole batch immediately (a batch
+// shares one capture timezone). The DateShift control goes through
+// batchDraft and is applied to every image at exitBatch().
 
 struct MetaPanelBatch: View {
     @Environment(AppState.self) private var state
@@ -110,8 +112,9 @@ struct MetaPanelBatch: View {
                 timezone: Binding(
                     get: { state.masterRecord?.timezone ?? .unknown },
                     set: { newTz in
-                        guard let id = state.masterID else { return }
-                        state.updateField(id: id, field: .timezone) { $0.timezone = newTz }
+                        // Batch shares one capture timezone -- broadcast the
+                        // picked value to every selected image, not just master.
+                        state.applyTimezoneToAll(newTz)
                     }
                 )
             )
