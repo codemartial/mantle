@@ -11,6 +11,19 @@ final class AppState {
     var status: SaveStatus = .idle
     var isScanning: Bool = false
 
+    // Browser-grid filter. The grid renders `visibleLibrary` instead of
+    // `library` whenever this is active.
+    var filter = LibraryFilter()
+
+    // Title + keywords for every file, read by a background sweep on folder
+    // open (MetadataIndex). A missing id means not yet swept (treated as
+    // unknown -- the file stays visible until classified); an empty headline
+    // or empty keywords means known-absent. Live edits in EditStore take
+    // precedence over this cache.
+    private(set) var sweptMeta: [String: SweptMetadata] = [:]
+    // >0 while the metadata sweep is running, for the toolbar's progress hint.
+    private(set) var headlineSweepRemaining: Int = 0
+
     // Batch editing state. Non-empty iff in batch mode. batchOrder[0] is the
     // master -- its values prefill nothing in the draft (blank = do not
     // modify), but its date / tz / location ARE editable directly through
@@ -88,6 +101,8 @@ final class AppState {
         batchDraft = BatchDraft()
         status = .idle
         library = []
+        sweptMeta = [:]
+        headlineSweepRemaining = 0
         thumbs.reset()
         edits.reset()
         autoSelectOnScan = autoSelect
@@ -108,6 +123,24 @@ final class AppState {
                 autoSelectOnScan = false
                 applyInitialSelection()
             }
+            self.sweepHeadlines(for: url, entries: entries)
+        }
+    }
+
+    // One-time background metadata sweep so the headline / keyword filters
+    // can classify every file, not just the lazily-ingested selection. Reads
+    // all titles and keywords in a single exiftool pass off the main actor.
+    // Bails if the folder changed out from under us before the read finished.
+    private func sweepHeadlines(for url: URL, entries: [LibraryEntry]) {
+        guard !entries.isEmpty else { return }
+        headlineSweepRemaining = entries.count
+        Task {
+            let meta: [String: SweptMetadata] = await Task.detached(priority: .utility) {
+                MetadataIndex.scan(entries: entries)
+            }.value
+            guard self.folderURL == url else { return }
+            self.sweptMeta = meta
+            self.headlineSweepRemaining = 0
         }
     }
 
@@ -196,7 +229,9 @@ final class AppState {
             select(id)
             return
         }
-        let ids = library.map { $0.id }
+        // Range spans the *visible* grid order, so a shift-range never pulls
+        // in rows hidden by the active filter.
+        let ids = visibleLibrary.map { $0.id }
         guard let aIdx = ids.firstIndex(of: anchor),
               let bIdx = ids.firstIndex(of: id) else {
             select(id)
@@ -611,5 +646,123 @@ final class AppState {
     var selectedRecord: ImageRecord? {
         guard let id = selectedID else { return nil }
         return edits.record(id)
+    }
+
+    // MARK: - Filtering
+
+    // The best-known headline for an id: a live (possibly unsaved) edit wins
+    // over the sweep cache, so toggling a title in the right pane re-filters
+    // immediately. Returns nil when neither source knows yet (unknown).
+    func headlineValue(for id: String) -> String? {
+        if let rec = edits.record(id) { return rec.headline }
+        return sweptMeta[id]?.headline
+    }
+
+    // Same shape as headlineValue, for keywords. nil == not yet swept.
+    func keywordsValue(for id: String) -> [String]? {
+        if let rec = edits.record(id) { return rec.keywords }
+        return sweptMeta[id]?.keywords
+    }
+
+    // The distinct keyword vocabulary across the whole folder, for filter
+    // autocomplete. Union of the swept metadata and any live (session-edited)
+    // records, deduped case-insensitively but keeping each keyword's existing
+    // casing -- so a folder tagged "Beach" offers "Beach", not whatever case
+    // the user types. Sorted case-insensitively. Deterministic: ids are
+    // walked in sorted order, first-seen casing wins on conflict.
+    var keywordVocabulary: [String] {
+        var display: [String: String] = [:]   // lowercased -> canonical form
+        let ids = Set(sweptMeta.keys).union(edits.images.keys).sorted()
+        for id in ids {
+            guard let kws = keywordsValue(for: id) else { continue }
+            for kw in kws {
+                let t = kw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if t.isEmpty { continue }
+                let lower = t.lowercased()
+                if display[lower] == nil { display[lower] = t }
+            }
+        }
+        return display.values.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    // Close out the current edit session before the filter dialog opens, so
+    // a filter can't strand unsaved edits on files it hides -- or fragment a
+    // batch whose draft edits aren't in EditStore yet. Batch: synthesize +
+    // save every member, then collapse to the master. Single: save the
+    // selected file if it's dirty. A no-op when there's nothing to flush.
+    func flushBeforeFilter() {
+        if !batchOrder.isEmpty {
+            exitBatch(selecting: selectedID)
+        } else if let sel = selectedID, edits.isDirty(sel) {
+            saver.requestSave(id: sel)
+        }
+    }
+
+    // Evaluate one attribute against one entry. Returns nil when the answer
+    // is not yet known (headline sweep still in flight for this file) so the
+    // caller can keep the file visible until it's classified.
+    func matches(_ entry: LibraryEntry, _ attr: FilterAttribute, _ f: AttributeFilter) -> Bool? {
+        switch attr {
+        case .xmp:
+            let has = entry.sidecarURL != nil   // always known from the scan
+            switch f {
+            case .present:    return has
+            case .absent:     return !has
+            case .ignore, .matches, .chips: return true  // xmp is binary; no match status
+            }
+        case .headline:
+            guard let value = headlineValue(for: entry.id) else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch f {
+            case .ignore:        return true
+            case .present:       return !trimmed.isEmpty
+            case .absent:        return trimmed.isEmpty
+            case .matches(let q):
+                let query = q.trimmingCharacters(in: .whitespacesAndNewlines)
+                return query.isEmpty || trimmed.localizedCaseInsensitiveContains(query)
+            case .chips:         return true   // headline has no chip mode
+            }
+        case .keywords:
+            guard let kw = keywordsValue(for: entry.id) else { return nil }
+            switch f {
+            case .ignore:   return true
+            case .present:  return !kw.isEmpty
+            case .absent:   return kw.isEmpty
+            case .matches:  return true        // keywords use chips, not text
+            case .chips(let chips):
+                // Exact, case-insensitive. File must carry every include chip
+                // and none of the exclude chips. Blank-text chips are dropped.
+                let have = Set(kw.map { $0.lowercased() })
+                func key(_ c: FilterChip) -> String? {
+                    let t = c.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    return t.isEmpty ? nil : t
+                }
+                let includes = chips.filter { !$0.exclude }.compactMap(key)
+                let excludes = chips.filter { $0.exclude }.compactMap(key)
+                return includes.allSatisfy { have.contains($0) }
+                    && excludes.allSatisfy { !have.contains($0) }
+            }
+        }
+    }
+
+    // The entries the browser grid renders. Applies the active filter with
+    // the .all / .any combinator. An undecidable (nil) attribute result does
+    // NOT hide the file while the sweep is still loading -- it's treated as a
+    // pass so files stay visible and re-filter reactively as titles arrive.
+    var visibleLibrary: [LibraryEntry] {
+        guard filter.isActive else { return library }
+        let active = filter.activeAttributes
+        return library.filter { entry in
+            switch filter.combine {
+            case .all:
+                return active.allSatisfy { attr in
+                    matches(entry, attr, filter.status(attr)) ?? true
+                }
+            case .any:
+                return active.contains { attr in
+                    matches(entry, attr, filter.status(attr)) == true
+                }
+            }
+        }
     }
 }

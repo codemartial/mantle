@@ -24,15 +24,18 @@ enum SidecarIO {
         return ImageIOReader.read(file: file, sidecar: sidecar)
     }
 
-    private static func build(json: [String: Any], file: URL, sidecar: URL?) -> ImageRecord {
-
-        // Headline read priority. Different tools write to different places:
-        // Lightroom uses XMP-dc:Title, Photoshop and Photo Mechanic use
-        // XMP-photoshop:Headline, modern IPTC Core uses XMP-iptcCore:Headline,
-        // legacy IPTC IIM uses IPTC:Headline + IPTC:ObjectName. After all
-        // those, fuzzy-match any other key ending in :Title / :Headline /
-        // :ObjectName so weird vendor namespaces still surface.
-        let headline = firstNonEmpty(
+    // Headline read priority. Different tools write to different places:
+    // Lightroom uses XMP-dc:Title, Photoshop and Photo Mechanic use
+    // XMP-photoshop:Headline, modern IPTC Core uses XMP-iptcCore:Headline,
+    // legacy IPTC IIM uses IPTC:Headline + IPTC:ObjectName. After all
+    // those, fuzzy-match any other key ending in :Title / :Headline /
+    // :ObjectName so weird vendor namespaces still surface.
+    //
+    // Shared so the bulk title sweep (HeadlineIndex) resolves headlines
+    // identically to a full single-file ingest -- one source of truth for
+    // the tag priority. Returns "" when no title-family tag carries text.
+    static func resolveHeadline(from json: [String: Any]) -> String {
+        firstNonEmpty(
             langDefault(json["XMP-dc:Title"]),
             string(json, "XMP-photoshop:Headline"),
             string(json, "XMP-iptcCore:Headline"),
@@ -41,6 +44,24 @@ enum SidecarIO {
             string(json, "IPTC:ObjectName"),
             fuzzyMatch(json, suffixes: ["title", "headline", "objectname"])
         )
+    }
+
+    // Keyword read priority, shared with the bulk metadata sweep
+    // (MetadataIndex) so its keyword filter classifies files identically to
+    // a full single-file ingest. Returns [] when no subject/keyword tag
+    // carries values.
+    static func resolveKeywords(from json: [String: Any]) -> [String] {
+        firstNonEmptyList(
+            stringArray(json, "XMP-dc:Subject"),
+            stringArray(json, "XMP-iptcCore:Keywords"),
+            stringArray(json, "XMP-lr:HierarchicalSubject"),
+            stringArray(json, "IPTC:Keywords")
+        )
+    }
+
+    private static func build(json: [String: Any], file: URL, sidecar: URL?) -> ImageRecord {
+
+        let headline = resolveHeadline(from: json)
 
         let caption = firstNonEmpty(
             langDefault(json["XMP-dc:Description"]),
@@ -56,12 +77,7 @@ enum SidecarIO {
             fuzzyMatch(json, suffixes: ["description", "caption", "caption-abstract", "comments", "imagedescription"])
         )
 
-        let keywords = firstNonEmptyList(
-            stringArray(json, "XMP-dc:Subject"),
-            stringArray(json, "XMP-iptcCore:Keywords"),
-            stringArray(json, "XMP-lr:HierarchicalSubject"),
-            stringArray(json, "IPTC:Keywords")
-        )
+        let keywords = resolveKeywords(from: json)
 
         // Timezone first -- needed to correctly parse offset-less date
         // strings (EXIF dates have no offset baked in; XMP dates do).

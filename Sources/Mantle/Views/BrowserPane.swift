@@ -16,6 +16,8 @@ struct BrowserPane: View {
                 placeholder("No folder open")
             } else if state.library.isEmpty && !state.isScanning {
                 placeholder("No images in this folder")
+            } else if state.filter.isActive && state.visibleLibrary.isEmpty {
+                placeholder("No files match the filter")
             } else {
                 grid
             }
@@ -25,7 +27,7 @@ struct BrowserPane: View {
     private var grid: some View {
         ScrollView {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(state.library) { entry in
+                ForEach(state.visibleLibrary) { entry in
                     ThumbnailCell(
                         entry: entry,
                         isSelected: !state.batchMode && state.selectedID == entry.id,
