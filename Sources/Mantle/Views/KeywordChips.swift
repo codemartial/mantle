@@ -1,15 +1,14 @@
 import SwiftUI
 
-// Chip list with an inline draft input. Comma or Enter commits. Backspace
-// on an empty draft removes the last chip. Each chip carries an X to remove.
-// Reads keywords directly from EditStore via AppState; mutations route
-// through AppState.updateField so the dirty bit recomputes per change.
+// Chip list with an inline draft input + keyword autocomplete (shared
+// KeywordInputBox). Comma or Enter commits, a suggestion can be accepted with
+// Enter / Tab / click, backspace on an empty draft removes the last chip,
+// each chip carries an X to remove. Reads keywords directly from EditStore
+// via AppState; mutations route through AppState.updateField so the dirty bit
+// recomputes per change.
 
 struct KeywordChips: View {
     @Environment(AppState.self) private var state
-
-    @State private var draft: String = ""
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -20,25 +19,20 @@ struct KeywordChips: View {
                     .foregroundStyle(Theme.accent)
             }
 
-            FlowLayout(spacing: 4) {
+            KeywordInputBox(
+                vocabulary: state.keywordVocabulary,
+                existing: keywords,
+                placeholder: keywords.isEmpty ? "Type a keyword, press , to add" : "Add...",
+                onCommit: addKeyword,
+                onBackspaceEmpty: removeLast
+            ) {
                 ForEach(Array(keywords.enumerated()), id: \.offset) { index, kw in
                     chip(kw, at: index)
                 }
-                draftInput
             }
-            .padding(5)
-            .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
-            .background(Theme.bgInput)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(inputFocused ? Theme.accentEdge : Theme.line1,
-                                  lineWidth: inputFocused ? 1 : 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .contentShape(Rectangle())
-            .onTapGesture { inputFocused = true }
+            // Recreate the box (clearing its draft) when the selection changes.
+            .id(state.selectedID)
         }
-        .onChange(of: state.selectedRecord?.id ?? "") { _, _ in draft = "" }
     }
 
     // MARK: - Source of truth
@@ -79,57 +73,28 @@ struct KeywordChips: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    // MARK: - Draft input
-
-    private var draftInput: some View {
-        TextField(keywords.isEmpty ? "Type a keyword, press , to add" : "Add...",
-                  text: $draft)
-            .textFieldStyle(.plain)
-            .focused($inputFocused)
-            .font(.system(size: 11 * 1.15))
-            .foregroundStyle(Theme.fg)
-            .frame(minWidth: 80, idealWidth: 120, maxWidth: .infinity, minHeight: 18)
-            .padding(.horizontal, 4)
-            .onSubmit { commit(draft) }
-            .onChange(of: draft) { _, newValue in
-                if newValue.contains(",") { commit(newValue) }
-            }
-            .onKeyPress(.delete) {
-                if draft.isEmpty, !keywords.isEmpty {
-                    removeKeyword(at: keywords.count - 1)
-                    return .handled
-                }
-                return .ignored
-            }
-    }
-
     // MARK: - Mutations
 
-    private func commit(_ raw: String) {
-        let parts = raw
-            .split(separator: ",", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !parts.isEmpty, let id = state.selectedID else {
-            draft = ""
-            return
-        }
-        // Case-insensitive dedupe at add-time: typing "beach" when "Beach"
-        // is already in the chips drops the new one. To rename case, the
-        // user removes the existing chip first, then re-adds with the new
-        // case. The on-disk comparator stays case-sensitive (so loading
-        // ["Beach","beach"] from someone else's sidecar doesn't get
-        // silently collapsed).
+    // Add one keyword with exactly the given casing (canonical from a
+    // suggestion, or the literal typed token). Case-insensitive dedupe at
+    // add-time: typing "beach" when "Beach" is already present drops the new
+    // one. To rename case, remove the existing chip first, then re-add. The
+    // on-disk comparator stays case-sensitive (so loading ["Beach","beach"]
+    // from someone else's sidecar doesn't get silently collapsed).
+    private func addKeyword(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let id = state.selectedID else { return }
         state.updateField(id: id, field: .keywords) { record in
-            var existingLower = Set(record.keywords.map { $0.lowercased() })
-            for part in parts {
-                let lower = part.lowercased()
-                if existingLower.contains(lower) { continue }
-                record.keywords.append(part)
-                existingLower.insert(lower)
+            let lower = t.lowercased()
+            if !record.keywords.contains(where: { $0.lowercased() == lower }) {
+                record.keywords.append(t)
             }
         }
-        draft = ""
+    }
+
+    private func removeLast() {
+        guard !keywords.isEmpty else { return }
+        removeKeyword(at: keywords.count - 1)
     }
 
     private func removeKeyword(at index: Int) {

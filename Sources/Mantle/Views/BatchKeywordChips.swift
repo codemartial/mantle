@@ -15,9 +15,6 @@ import SwiftUI
 struct BatchKeywordChips: View {
     @Environment(AppState.self) private var state
 
-    @State private var draft: String = ""
-    @FocusState private var inputFocused: Bool
-
     var body: some View {
         let common = state.commonKeywords
         let some = state.someKeywords
@@ -30,26 +27,23 @@ struct BatchKeywordChips: View {
                     .foregroundStyle(Theme.fgFaint)
             }
 
-            FlowLayout(spacing: 4) {
+            // Suggestions exclude keywords already in every image (common);
+            // a "some" keyword can still be suggested to add it to all.
+            KeywordInputBox(
+                vocabulary: state.keywordVocabulary,
+                existing: common,
+                placeholder: (common.isEmpty && some.isEmpty)
+                    ? "Type a keyword, press , to add to all"
+                    : "Add to all...",
+                onCommit: { state.addKeywordToAll($0) }
+            ) {
                 ForEach(common, id: \.self) { kw in
                     commonChip(kw)
                 }
                 ForEach(some, id: \.self) { kw in
                     someChip(kw)
                 }
-                draftInput
             }
-            .padding(5)
-            .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
-            .background(Theme.bgInput)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(inputFocused ? Theme.accentEdge : Theme.line1,
-                                  lineWidth: inputFocused ? 1 : 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .contentShape(Rectangle())
-            .onTapGesture { inputFocused = true }
 
             HStack(spacing: 6) {
                 Circle()
@@ -131,35 +125,4 @@ struct BatchKeywordChips: View {
         .help("Promote to all images")
     }
 
-    // MARK: - Draft input
-
-    private var draftInput: some View {
-        TextField(state.commonKeywords.isEmpty && state.someKeywords.isEmpty
-                  ? "Type a keyword, press , to add to all"
-                  : "Add to all...",
-                  text: $draft)
-            .textFieldStyle(.plain)
-            .focused($inputFocused)
-            .font(.system(size: 11 * 1.15))
-            .foregroundStyle(Theme.fg)
-            .frame(minWidth: 80, idealWidth: 120, maxWidth: .infinity, minHeight: 18)
-            .padding(.horizontal, 4)
-            .onSubmit { commit(draft) }
-            .onChange(of: draft) { _, newValue in
-                if newValue.contains(",") { commit(newValue) }
-            }
-    }
-
-    // MARK: - Mutations
-
-    private func commit(_ raw: String) {
-        let parts = raw
-            .split(separator: ",", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        for part in parts {
-            state.addKeywordToAll(part)
-        }
-        draft = ""
-    }
 }

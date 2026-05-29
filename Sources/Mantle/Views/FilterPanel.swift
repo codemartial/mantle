@@ -181,100 +181,27 @@ struct FilterPanel: View {
     }
 }
 
-// Inline keyword-chip editor for a chip-match filter. Mirrors KeywordChips:
-// comma / Enter commits, case-insensitive dedupe at add-time, backspace on
-// an empty draft removes the last chip, an x removes a chip. Added behavior:
-// tapping a chip's body toggles its include / exclude polarity. Include chips
-// read like KeywordChips (accent dot); exclude chips are red + strikethrough
-// so the negation reads at a glance.
-//
-// Autocomplete: as the draft is typed it offers case-insensitive PREFIX
-// matches from the folder's keyword vocabulary, excluding already-added
-// chips. Suggestions carry the vocabulary's existing casing, so typing "be"
-// offers "Beach" and accepting it adds "Beach" (not "be"). Up/Down move the
-// highlight, Enter / Tab / click accept it, comma still commits the literal
-// draft.
+// Inline keyword-chip editor for a chip-match filter. Wraps the shared
+// KeywordInputBox (draft field + autocomplete) and renders include/exclude
+// chips: tapping a chip's body toggles its polarity, the x removes it.
+// Include chips read like KeywordChips (accent dot); exclude chips are red +
+// strikethrough so the negation reads at a glance.
 private struct ChipEditor: View {
     @Binding var chips: [FilterChip]
     let vocabulary: [String]
 
-    @State private var draft: String = ""
-    @State private var highlight: Int = 0
-    @FocusState private var inputFocused: Bool
-
-    // Case-insensitive prefix matches from the vocabulary, minus what's
-    // already chipped. Capped so the list stays compact.
-    private var suggestions: [String] {
-        let q = draft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return [] }
-        let existing = Set(chips.map { $0.text.lowercased() })
-        return vocabulary
-            .filter { $0.lowercased().hasPrefix(q) && !existing.contains($0.lowercased()) }
-            .prefix(8)
-            .map { $0 }
-    }
-
-    private var highlightClamped: Int {
-        suggestions.isEmpty ? 0 : min(max(highlight, 0), suggestions.count - 1)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            chipBox
-            if !suggestions.isEmpty {
-                suggestionList
-            }
-        }
-    }
-
-    private var chipBox: some View {
-        FlowLayout(spacing: 4) {
+        KeywordInputBox(
+            vocabulary: vocabulary,
+            existing: chips.map { $0.text },
+            placeholder: chips.isEmpty ? "Type a keyword, press , to add" : "Add...",
+            onCommit: addKeyword,
+            onBackspaceEmpty: { if !chips.isEmpty { chips.removeLast() } }
+        ) {
             ForEach(Array(chips.enumerated()), id: \.offset) { index, chip in
                 chipView(chip, at: index)
             }
-            draftInput
         }
-        .padding(5)
-        .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
-        .background(Theme.bgInput)
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(inputFocused ? Theme.accentEdge : Theme.line1,
-                              lineWidth: inputFocused ? 1 : 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5))
-        .contentShape(Rectangle())
-        .onTapGesture { inputFocused = true }
-    }
-
-    private var suggestionList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.element) { idx, s in
-                Button {
-                    addKeyword(s)
-                } label: {
-                    HStack {
-                        Text(s)
-                            .font(.system(size: 11 * 1.15))
-                            .foregroundStyle(Theme.fg)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 22)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(idx == highlightClamped ? Theme.accentSoft : Color.clear)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 2)
-        .background(Theme.bgElev)
-        .overlay(
-            RoundedRectangle(cornerRadius: 5)
-                .strokeBorder(Theme.line1, lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
     @ViewBuilder
@@ -313,83 +240,16 @@ private struct ChipEditor: View {
         .help(chip.exclude ? "Excluded -- click to require instead" : "Required -- click to exclude instead")
     }
 
-    private var draftInput: some View {
-        TextField(chips.isEmpty ? "Type a keyword, press , to add" : "Add...",
-                  text: $draft)
-            .textFieldStyle(.plain)
-            .focused($inputFocused)
-            .font(.system(size: 11 * 1.15))
-            .foregroundStyle(Theme.fg)
-            .frame(minWidth: 80, idealWidth: 120, maxWidth: .infinity, minHeight: 18)
-            .padding(.horizontal, 4)
-            .onSubmit { acceptOrCommit() }
-            .onChange(of: draft) { _, newValue in
-                highlight = 0
-                if newValue.contains(",") { commit(newValue) }
-            }
-            .onKeyPress(.downArrow) {
-                guard !suggestions.isEmpty else { return .ignored }
-                highlight = min(highlightClamped + 1, suggestions.count - 1)
-                return .handled
-            }
-            .onKeyPress(.upArrow) {
-                guard !suggestions.isEmpty else { return .ignored }
-                highlight = max(highlightClamped - 1, 0)
-                return .handled
-            }
-            .onKeyPress(.tab) {
-                guard !suggestions.isEmpty else { return .ignored }
-                addKeyword(suggestions[highlightClamped])
-                return .handled
-            }
-            .onKeyPress(.delete) {
-                if draft.isEmpty, !chips.isEmpty {
-                    removeChip(at: chips.count - 1)
-                    return .handled
-                }
-                return .ignored
-            }
-    }
-
     // MARK: - Mutations
 
-    // Enter: accept the highlighted suggestion if the list is open, else
-    // commit whatever's typed as a literal keyword.
-    private func acceptOrCommit() {
-        if !suggestions.isEmpty {
-            addKeyword(suggestions[highlightClamped])
-        } else {
-            commit(draft)
-        }
-    }
-
-    // Add a single keyword with exactly the given casing (used by the
-    // suggestion list, which carries the vocabulary's canonical form).
+    // Add a keyword with exactly the given casing (canonical from a
+    // suggestion, or the literal typed token), deduped case-insensitively.
     private func addKeyword(_ text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         if !chips.contains(where: { $0.text.lowercased() == t.lowercased() }) {
             chips.append(FilterChip(text: t))
         }
-        draft = ""
-        highlight = 0
-    }
-
-    private func commit(_ raw: String) {
-        let parts = raw
-            .split(separator: ",", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        guard !parts.isEmpty else { draft = ""; return }
-        var existingLower = Set(chips.map { $0.text.lowercased() })
-        for part in parts {
-            let lower = part.lowercased()
-            if existingLower.contains(lower) { continue }
-            chips.append(FilterChip(text: part))
-            existingLower.insert(lower)
-        }
-        draft = ""
-        highlight = 0
     }
 
     private func removeChip(at index: Int) {
