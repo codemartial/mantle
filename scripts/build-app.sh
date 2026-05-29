@@ -146,7 +146,13 @@ plist = {
 sys.stdout.buffer.write(plistlib.dumps(plist, fmt=plistlib.FMT_XML))
 PY
 
-hdiutil udifrez -xml "$SLA_PLIST" '' "$DMG" >/dev/null
+# `udifrez` is the only way to attach SLA resources to a UDIF image.
+# Apple deprecated it in macOS 12 but shipped no replacement -- there is
+# no SLA/license flag on `hdiutil create`/`convert`, and create-dmg /
+# dmgbuild still call udifrez under the hood too. `-quiet` suppresses the
+# (unactionable) deprecation notice while still returning non-zero on a
+# real failure, so `set -e` aborts the build if Apple ever removes it.
+hdiutil udifrez -quiet -xml "$SLA_PLIST" '' "$DMG" >/dev/null
 rm -f "$SLA_PLIST"
 rm -rf "$STAGE"
 
