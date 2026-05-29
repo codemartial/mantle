@@ -149,12 +149,25 @@ private struct MapRepresentable: NSViewRepresentable {
             object: map
         )
 
-        // Click-to-place: when the current image has no pin yet, a plain
-        // click drops one at the click point. Once a pin exists the
-        // recognizer no-ops (the user can drag the existing pin). NSClick-
-        // GestureRecognizer auto-fails on movement, so pan still works.
-        // Delegate filters out clicks landing on MKMapView's own subviews
-        // (zoom +/-, compass) so they receive their mouseDown normally.
+        // Click-to-place: a single click on open map drops or relocates the
+        // pin at the click point. Placement is deferred past the system
+        // double-click interval and cancelled if a second click arrives, so
+        // a double-click only zooms (it never drops a pin). NSClickGesture-
+        // Recognizer auto-fails on movement, so pan still works. Clicks that
+        // land on the pin go to it for dragging, and the delegate filters out
+        // clicks on MKMapView's own subviews (zoom +/-, compass) -- both via
+        // the gesture delegate's hit-test below.
+        // Just the 1-click recognizer -- deliberately NO 2-click recognizer.
+        // A custom double-click recognizer wins gesture arbitration over
+        // MKMapView's own internal double-click recognizer, which kills the
+        // map's built-in zoom. The 1-click recognizer, by contrast, coexists
+        // with zoom (the map still got its double-click before). We suppress
+        // placement on a double-click instead by reading the event's
+        // clickCount in the gesture delegate (the reliable Apple signal),
+        // cancelling the deferred single-click placement when a second click
+        // lands. NSClickGestureRecognizer auto-fails on movement so click-drag
+        // panning still works; the delegate's hit-test keeps the zoom +/- and
+        // compass clicks away from us.
         let clickRecognizer = NSClickGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleClickToPlace(_:))
@@ -211,6 +224,9 @@ private final class Coordinator: NSObject, MKMapViewDelegate, NSGestureRecognize
     private var pin: LocationPin?
     private var currentDirection: Double?
     private var lastRecenterToken: Int = 0
+    // A single-click placement waiting out the double-click window. Cancelled
+    // if a second click lands (double-click -> zoom, no placement).
+    private var pendingPlace: DispatchWorkItem?
 
     init(onDrag: @escaping (Double, Double) -> Void,
          onLayout: @escaping (ConeLayout?) -> Void,
@@ -274,22 +290,60 @@ private final class Coordinator: NSObject, MKMapViewDelegate, NSGestureRecognize
     // the deepest hit is the map view itself.
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer,
                            shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        // A second click within the double-click window cancels the pending
+        // single-click placement, so a double-click only zooms. This runs on
+        // the real NSEvent (clickCount is authoritative here), independent of
+        // whether the recognizer's action re-fires on the second click.
+        if event.clickCount > 1 {
+            pendingPlace?.cancel()
+            pendingPlace = nil
+        }
         guard let map = gestureRecognizer.view,
               let contentView = event.window?.contentView else { return true }
         let hit = contentView.hitTest(event.locationInWindow)
         return hit === map
     }
 
-    // Click anywhere on a pinless map to drop a pin at the click point.
-    // Gated to pin == nil so the gesture doesn't interfere with the normal
-    // drag-existing-pin flow once a coordinate is set; to move an existing
-    // pin the user drags it.
+    // Single click on open map drops or relocates the pin at the click
+    // point -- no longer gated to a pinless map, so an existing pin jumps to
+    // wherever you click instead of having to be dragged. Placement is
+    // deferred by the system double-click interval; if a second click lands
+    // first the gesture delegate cancels it, so a double-click only zooms.
+    // Clicks on the pin itself reach it for dragging (the gesture delegate's
+    // hit-test fails this recognizer there), so this only fires on open map.
     @objc func handleClickToPlace(_ recognizer: NSClickGestureRecognizer) {
-        guard pin == nil else { return }
         guard let map = recognizer.view as? MKMapView else { return }
+
+        // Reset any in-flight placement window on a fresh click.
+        pendingPlace?.cancel()
+
+        // Belt-and-suspenders with the delegate's clickCount check: skip the
+        // second click of a multi-click so a double-click never places.
+        if let clicks = NSApp.currentEvent?.clickCount, clicks > 1 {
+            pendingPlace = nil
+            return
+        }
+
         let point = recognizer.location(in: map)
         let coord = map.convert(point, toCoordinateFrom: map)
-        onDrag(coord.latitude, coord.longitude)
+        let work = DispatchWorkItem { [weak self, weak map] in
+            guard let self, let map else { return }
+            self.pendingPlace = nil
+            // Move the pin directly rather than waiting for the data round-
+            // trip: ImageRecord's Equatable ignores lat/lon, so a coords-only
+            // change can fail to re-drive sync and the annotation would stay
+            // put. Updating the annotation here makes placement reliable and
+            // instant; onDrag then persists the new coordinate.
+            if let pin = self.pin {
+                pin.coordinate = coord
+            } else {
+                self.installPin(at: coord, on: map)
+            }
+            self.publishLayout(on: map)
+            self.onDrag(coord.latitude, coord.longitude)
+        }
+        pendingPlace = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
     }
 
     func applyRecenterIfNeeded(token: Int, on map: MKMapView, record: ImageRecord?) {
