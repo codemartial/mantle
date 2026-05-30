@@ -13,7 +13,9 @@ final class AppState {
 
     // Browser-grid filter. The grid renders `visibleLibrary` instead of
     // `library` whenever this is active.
-    var filter = LibraryFilter()
+    var filter = LibraryFilter() {
+        didSet { reconcileSelectionWithFilter() }
+    }
 
     // Title + keywords for every file, read by a background sweep on folder
     // open (MetadataIndex). A missing id means not yet swept (treated as
@@ -763,6 +765,21 @@ final class AppState {
                     matches(entry, attr, filter.status(attr)) == true
                 }
             }
+        }
+    }
+
+    // When the active filter changes, the selected file may no longer be in
+    // the visible set. Leaving it selected keeps it in the preview and right
+    // pane, which reads as "this file matched the filter" when it didn't.
+    // Drop the selection (saving any pending edit first, as a normal deselect
+    // does) so the preview follows the filtered grid's empty state. Batch mode
+    // is already collapsed via flushBeforeFilter before the dialog opens, so
+    // only single selection needs reconciling here.
+    private func reconcileSelectionWithFilter() {
+        guard let id = selectedID, filter.isActive else { return }
+        if !visibleLibrary.contains(where: { $0.id == id }) {
+            saver.requestSave(id: id)
+            selectedID = nil
         }
     }
 }

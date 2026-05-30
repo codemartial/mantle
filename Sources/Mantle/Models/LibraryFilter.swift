@@ -34,7 +34,7 @@ enum FilterAttribute: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .xmp:      return "XMP sidecar"
-        case .headline: return "Headline"
+        case .headline: return "Title"
         case .keywords: return "Keywords"
         }
     }

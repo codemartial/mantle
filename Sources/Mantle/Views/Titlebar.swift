@@ -151,10 +151,10 @@ struct Titlebar: View {
             .foregroundStyle(active ? Theme.accentFg : Theme.fg)
             .padding(.horizontal, 9)
             .frame(height: 24)
-            .background(active ? Theme.accent : Theme.bgInput)
+            .background(active ? Theme.accent : Theme.bgElev)
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(active ? Theme.accentEdge : Theme.line1, lineWidth: 0.5)
+                    .strokeBorder(active ? Theme.accentEdge : Theme.line2, lineWidth: 0.5)
             )
             .clipShape(RoundedRectangle(cornerRadius: 5))
         }

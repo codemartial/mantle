@@ -22,13 +22,13 @@ struct BatchCaptionBlock: View {
         VStack(alignment: .leading, spacing: 10) {
 
             VStack(alignment: .leading, spacing: 4) {
-                labelRow("Headline (batch)", count: state.batchDraft.headline.count)
+                labelRow("Title (batch)", count: state.batchDraft.headline.count)
                 headlineInput(text: $state.batchDraft.headline)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("Caption (batch)")
+                    Text("Description (batch)")
                         .font(.system(size: 10 * 1.15, weight: .semibold))
                         .tracking(0.8)
                         .textCase(.uppercase)
@@ -53,7 +53,7 @@ struct BatchCaptionBlock: View {
 
                 if state.batchDraft.captionMode == .replace {
                     captionInput(text: $state.batchDraft.captionReplace,
-                                 placeholder: "Leave blank to keep each caption")
+                                 placeholder: "Leave blank to keep each description")
                 } else {
                     appendCaptionStack(append: $state.batchDraft.captionAppend)
                 }
@@ -73,7 +73,7 @@ struct BatchCaptionBlock: View {
     // MARK: - Inputs
 
     private func headlineInput(text: Binding<String>) -> some View {
-        TextField("Leave blank to keep each headline", text: text)
+        TextField("Leave blank to keep each title", text: text)
             .textFieldStyle(.plain)
             .focused($focus, equals: .headline)
             .font(.system(size: 11 * 1.15))
@@ -117,7 +117,7 @@ struct BatchCaptionBlock: View {
     // read-only here; to edit it, they need to single-select the master.
     private func appendCaptionStack(append: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(masterCaption.isEmpty ? "(master caption is empty)" : masterCaption)
+            Text(masterCaption.isEmpty ? "(master description is empty)" : masterCaption)
                 .font(.system(size: 11 * 1.15))
                 .foregroundStyle(Theme.fgFaint)
                 .padding(.horizontal, 8)
@@ -130,7 +130,7 @@ struct BatchCaptionBlock: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 5))
 
-            captionInput(text: append, placeholder: "Text to append to every caption")
+            captionInput(text: append, placeholder: "Text to append to every description")
         }
     }
 

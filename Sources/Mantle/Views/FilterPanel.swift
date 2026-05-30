@@ -110,10 +110,14 @@ struct FilterPanel: View {
         } label: {
             Image(systemName: kind.symbol)
                 .font(.system(size: 11 * 1.15, weight: selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Theme.accentFg : Theme.fgMute)
+                .foregroundStyle(selected ? kind.selectedFg : Theme.fgMute)
                 .frame(width: 24, height: 22)
-                .background(selected ? Theme.accent : Color.clear)
+                .background(selected ? kind.selectedBg : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
+                // Without this the hit area is just the glyph's pixels (the
+                // unselected fill is clear), so clicks in the surrounding
+                // padding miss. Make the whole frame clickable.
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(kind.help)
@@ -270,11 +274,28 @@ private enum StatusKind: CaseIterable, Hashable {
 
     var symbol: String {
         switch self {
-        case .ignore:  return "circle"
+        case .ignore:  return "circle.dotted"
         case .present: return "checkmark"
         case .absent:  return "xmark"
         case .matches: return "magnifyingglass"
         }
+    }
+
+    // Selected-state fill per status: 18% grey for ignore, green for the
+    // tick, red for the cross, blue for search.
+    var selectedBg: Color {
+        switch self {
+        case .ignore:  return Theme.filterIgnore
+        case .present: return Theme.ok
+        case .absent:  return Theme.no
+        case .matches: return Theme.accent
+        }
+    }
+
+    // The ignore fill is dark, so it carries light text; the green/red/blue
+    // fills are bright enough for the dark accent foreground.
+    var selectedFg: Color {
+        self == .ignore ? Theme.fg : Theme.accentFg
     }
 
     var help: String {

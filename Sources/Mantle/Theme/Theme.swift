@@ -41,6 +41,10 @@ enum Theme {
     static let ok          = oklch(0.70, 0.13, 142)
     static let warn        = oklch(0.78, 0.14,  60)
     static let no          = oklch(0.65, 0.16,  28)
+    // Mid grey -- selected fill for the "ignore" filter slot. Sits well
+    // above the segmented control's bgInput (0.17) container so the
+    // selection reads, while staying neutral against the green/red/blue.
+    static let filterIgnore = oklch(0.42, 0.005, 250)
 
     // Chips
     static let chipBg      = oklch(0.30, 0.005, 250)

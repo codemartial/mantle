@@ -121,7 +121,13 @@ struct StatusBar: View {
 
     private var itemCountText: String {
         guard state.folderURL != nil else { return "0 items" }
-        return "\(state.library.count) items"
+        let total = state.library.count
+        // While a filter is active, show matches-over-total ("F/N items") so
+        // the count reflects what the browser grid is actually showing.
+        if state.filter.isActive {
+            return "\(state.visibleLibrary.count)/\(total) items"
+        }
+        return "\(total) items"
     }
 
     private var selectionSummary: String {

@@ -138,10 +138,7 @@ enum ExifToolWriter {
     private static func headlineArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {
         guard fields.contains(.headline) else { return [] }
         let value = record.headline.trimmingCharacters(in: .whitespacesAndNewlines)
-        return [
-            "-XMP-photoshop:Headline=\(value)",
-            "-XMP-dc:Title-x-default=\(value)",
-        ]
+        return ["-XMP-dc:Title-x-default=\(value)"]
     }
 
     private static func captionArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {

@@ -21,7 +21,7 @@ struct CaptionBlock: View {
         VStack(alignment: .leading, spacing: 10) {
 
             VStack(alignment: .leading, spacing: 4) {
-                labelRow("Headline",
+                labelRow("Title",
                          count: headlineValue.count,
                          warnAt: headlineWarnAt,
                          overAt: headlineOverAt)
@@ -29,7 +29,7 @@ struct CaptionBlock: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                labelRow("Caption",
+                labelRow("Description",
                          count: captionValue.count,
                          warnAt: nil,
                          overAt: nil)
