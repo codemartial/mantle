@@ -15,9 +15,13 @@ free to use, modify, and share for any noncommercial purpose. See
 
 ## Screenshots
 
-| Single image | Batch edit |
-| --- | --- |
-| ![Single image, dark](screenshots/handoff-01-dark-single.png) | ![Batch edit, dark](screenshots/handoff-02-dark-batch.png) |
+Editing a single image, with the library filter panel open:
+
+![Single-image editor with filter panel](screenshots/single.png)
+
+Batch mode: editing title, caption, keywords, and location across a selection:
+
+![Batch editing across a selection](screenshots/batch.png)
 
 ## Features
 
