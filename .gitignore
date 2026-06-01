@@ -3,6 +3,9 @@
 .idea/
 .vscode/
 
+# Local Claude Code session config
+.claude/
+
 # Swift Package Manager
 .build/
 .swiftpm/

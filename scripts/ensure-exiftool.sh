@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Tahir Hashmi
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# This file is part of Mantle, licensed under the PolyForm Noncommercial
+# License 1.0.0 -- free for any noncommercial purpose, including
+# modification. See the LICENSE file for the full text, or
+# <https://polyformproject.org/licenses/noncommercial/1.0.0>.
+
 # Ensure a vendored copy of ExifTool exists at the expected path.
 # Fetches the current release from exiftool.org when missing or stale.
 # exiftool.org only hosts the latest release, so we always track latest.

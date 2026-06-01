@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Tahir Hashmi
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# This file is part of Mantle, licensed under the PolyForm Noncommercial
+# License 1.0.0 -- free for any noncommercial purpose, including
+# modification. See the LICENSE file for the full text, or
+# <https://polyformproject.org/licenses/noncommercial/1.0.0>.
+
 # make-icns.sh — turn Mantle.iconset/ into Mantle.icns.
 # Run from the folder containing Mantle.iconset/.
 
