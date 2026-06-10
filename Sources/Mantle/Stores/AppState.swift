@@ -8,6 +8,7 @@
 
 import Foundation
 import Observation
+import AppKit
 
 @MainActor
 @Observable
@@ -15,7 +16,15 @@ final class AppState {
 
     var folderURL: URL?
     var library: [LibraryEntry] = []
-    var selectedID: String?
+    var selectedID: String? {
+        didSet {
+            // Switching images closes the open typing-coalescing window --
+            // returning to an image later starts a fresh undo step.
+            if selectedID != oldValue {
+                undo.breakCoalescing()
+            }
+        }
+    }
     var status: SaveStatus = .idle
     var isScanning: Bool = false
 
@@ -38,14 +47,37 @@ final class AppState {
     // master -- its values prefill nothing in the draft (blank = do not
     // modify), but its date / tz / location ARE editable directly through
     // the right pane in batch mode (writes flow through normal updateField).
-    var batchOrder: [String] = []
+    var batchOrder: [String] = [] {
+        // Each live batch gets one session identity; undo entries recorded
+        // while it is active carry it, so performUndo can tell when the
+        // chain walks out of the current batch's history.
+        didSet {
+            if batchOrder.count >= 2 {
+                if undo.currentSession == nil { undo.currentSession = UUID() }
+            } else {
+                undo.currentSession = nil
+            }
+        }
+    }
     var batchDraft: BatchDraft = BatchDraft() {
         // Draft mutations land outside EditStore (synthesis happens on exit)
         // but the status pill needs to reflect the pending count so the user
         // sees their typing reflected immediately. saver is set up in init();
         // the implicit-unwrap-optional pattern keeps this safe even if Swift
         // someday fires didSet during init.
-        didSet { saver?.dirtyChanged() }
+        //
+        // Draft typing is also undoable: every binding write lands here with
+        // its old value, so this didSet is the single capture point -- the
+        // batch-mode counterpart of updateField. Programmatic resets are
+        // filtered out because they happen after batchOrder is cleared
+        // (batchMode false) or during history replay (isRestoringHistory).
+        didSet {
+            saver?.dirtyChanged()
+            guard batchMode, !isRestoringHistory, oldValue != batchDraft,
+                  let diff = BatchDraft.changedField(oldValue, batchDraft) else { return }
+            undo.recordDraft(before: oldValue, after: batchDraft,
+                             fieldKey: diff.key, label: diff.label)
+        }
     }
 
     // Last single-clicked ID. Pivot for Shift+Click range selection. Stays
@@ -66,7 +98,17 @@ final class AppState {
 
     let thumbs = ThumbnailCache()
     let edits = EditStore()
+    let undo = UndoStack()
     let debugLog = DebugLog()
+
+    // True while performUndo/performRedo replays snapshots through
+    // updateField -- the replay must not record fresh history.
+    private var isRestoringHistory = false
+
+    // Transient "Undid Batch Edit (5 photos)" message for the StatusBar,
+    // auto-cleared after a few seconds (same shape as the enricher summary).
+    private(set) var undoToast: String?
+    private var undoToastTask: Task<Void, Never>?
     // Force-unwrapped because saver needs `self` -- assigned in init below.
     // SaveCoordinator stores AppState weakly, so the cycle is broken.
     private(set) var saver: SaveCoordinator!
@@ -115,6 +157,9 @@ final class AppState {
         headlineSweepRemaining = 0
         thumbs.reset()
         edits.reset()
+        undo.reset()
+        undoToastTask?.cancel()
+        undoToast = nil
         autoSelectOnScan = autoSelect
         preferredSelectionID = preferredID
         scan(url)
@@ -276,6 +321,9 @@ final class AppState {
         synthesizeBatch()
         batchOrder = []
         batchDraft = BatchDraft()
+        // The synthesized "Batch Edit" entry supersedes the draft-typing
+        // steps; without the live draft they would replay into nothing.
+        undo.purgeDraftEntries()
         // Fire-and-forget saves for every id touched by synthesis. The
         // SaveCoordinator dedupes per-id so this is fine even if some ids
         // weren't actually dirtied.
@@ -309,44 +357,47 @@ final class AppState {
         let trimmedReplace = draft.captionReplace.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var skipped: [String] = []
-        for id in ids {
-            guard let current = edits.record(id) else {
-                skipped.append(id)
-                continue
-            }
-
-            if !trimmedHeadline.isEmpty,
-               current.headline.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedHeadline {
-                updateField(id: id, field: .headline) { rec in
-                    rec.headline = draft.headline
+        withUndoGroup(label: "Batch Edit",
+                      labelFor: { "Batch Edit (\(Self.photoCount($0)))" }) {
+            for id in ids {
+                guard let current = edits.record(id) else {
+                    skipped.append(id)
+                    continue
                 }
-            }
 
-            switch draft.captionMode {
-            case .replace:
-                if !trimmedReplace.isEmpty,
-                   current.caption.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedReplace {
-                    updateField(id: id, field: .caption) { rec in
-                        rec.caption = draft.captionReplace
+                if !trimmedHeadline.isEmpty,
+                   current.headline.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedHeadline {
+                    updateField(id: id, field: .headline) { rec in
+                        rec.headline = draft.headline
                     }
                 }
-            case .append:
-                let trimmedAppend = draft.captionAppend.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmedAppend.isEmpty {
-                    let trimmedPrior = current.caption.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let merged = trimmedPrior.isEmpty
-                        ? trimmedAppend
-                        : trimmedPrior + "\n\n" + trimmedAppend
-                    updateField(id: id, field: .caption) { rec in
-                        rec.caption = merged
+
+                switch draft.captionMode {
+                case .replace:
+                    if !trimmedReplace.isEmpty,
+                       current.caption.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedReplace {
+                        updateField(id: id, field: .caption) { rec in
+                            rec.caption = draft.captionReplace
+                        }
+                    }
+                case .append:
+                    let trimmedAppend = draft.captionAppend.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmedAppend.isEmpty {
+                        let trimmedPrior = current.caption.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let merged = trimmedPrior.isEmpty
+                            ? trimmedAppend
+                            : trimmedPrior + "\n\n" + trimmedAppend
+                        updateField(id: id, field: .caption) { rec in
+                            rec.caption = merged
+                        }
                     }
                 }
-            }
 
-            if draft.hasDateShift, let cd = current.captureDate {
-                let shifted = cd.addingTimeInterval(draft.dateShiftInterval)
-                updateField(id: id, field: .captureDate) { rec in
-                    rec.captureDate = shifted
+                if draft.hasDateShift, let cd = current.captureDate {
+                    let shifted = cd.addingTimeInterval(draft.dateShiftInterval)
+                    updateField(id: id, field: .captureDate) { rec in
+                        rec.captureDate = shifted
+                    }
                 }
             }
         }
@@ -365,15 +416,18 @@ final class AppState {
         guard !trimmed.isEmpty else { return }
         let lower = trimmed.lowercased()
         var skipped = 0
-        for id in batchOrder {
-            guard let rec = edits.record(id) else {
-                skipped += 1
-                continue
-            }
-            let existingLower = Set(rec.keywords.map { $0.lowercased() })
-            if existingLower.contains(lower) { continue }
-            updateField(id: id, field: .keywords) { record in
-                record.keywords.append(trimmed)
+        withUndoGroup(label: "Add Keyword",
+                      labelFor: { "Add Keyword '\(trimmed)' (\(Self.photoCount($0)))" }) {
+            for id in batchOrder {
+                guard let rec = edits.record(id) else {
+                    skipped += 1
+                    continue
+                }
+                let existingLower = Set(rec.keywords.map { $0.lowercased() })
+                if existingLower.contains(lower) { continue }
+                updateField(id: id, field: .keywords) { record in
+                    record.keywords.append(trimmed)
+                }
             }
         }
         if skipped > 0 {
@@ -385,13 +439,16 @@ final class AppState {
     func removeKeywordFromAll(_ kw: String) {
         let lower = kw.lowercased()
         var skipped = 0
-        for id in batchOrder {
-            guard edits.record(id) != nil else {
-                skipped += 1
-                continue
-            }
-            updateField(id: id, field: .keywords) { record in
-                record.keywords.removeAll { $0.lowercased() == lower }
+        withUndoGroup(label: "Remove Keyword",
+                      labelFor: { "Remove Keyword '\(kw)' (\(Self.photoCount($0)))" }) {
+            for id in batchOrder {
+                guard edits.record(id) != nil else {
+                    skipped += 1
+                    continue
+                }
+                updateField(id: id, field: .keywords) { record in
+                    record.keywords.removeAll { $0.lowercased() == lower }
+                }
             }
         }
         if skipped > 0 {
@@ -411,7 +468,7 @@ final class AppState {
     // a sidecar whose hemisphere got flipped by a past bug -- the embedded
     // GPS in the parent file is the canonical source of truth. No-op when
     // the file has no embedded GPS coords.
-    func resetLocationFromEmbedded(id: String) {
+    func resetLocationFromEmbedded(id: String, mergeKey: UUID? = nil) {
         guard let entry = library.first(where: { $0.id == id }) else { return }
         let entryURL = entry.displayURL
         Task { [weak self] in
@@ -422,7 +479,14 @@ final class AppState {
             // Only apply if the file actually has embedded coords; otherwise
             // we'd silently wipe a user-set location.
             if embedded.latitude != nil || embedded.longitude != nil {
-                self.updateLocation(id: id, lat: embedded.latitude, lon: embedded.longitude)
+                // Each completion arrives in its own main-actor hop; the
+                // shared mergeKey folds a batch run's completions into one
+                // undo step as long as nothing else lands in between.
+                self.withUndoGroup(label: "Reset Location",
+                                   mergeKey: mergeKey,
+                                   labelFor: { "Reset Location (\(Self.photoCount($0)))" }) {
+                    self.updateLocation(id: id, lat: embedded.latitude, lon: embedded.longitude)
+                }
             } else {
                 self.debugLog.append("[reset] \(entry.basename): no embedded GPS")
             }
@@ -433,8 +497,9 @@ final class AppState {
     // its own record. Skips members whose parent files have no embedded GPS.
     func resetLocationFromEmbeddedForAllBatch() {
         guard batchMode else { return }
+        let runKey = UUID()
         for id in batchOrder {
-            resetLocationFromEmbedded(id: id)
+            resetLocationFromEmbedded(id: id, mergeKey: runKey)
         }
     }
 
@@ -446,12 +511,15 @@ final class AppState {
         let lat = master.latitude
         let lon = master.longitude
         var skipped = 0
-        for id in batchOrder where id != master.id {
-            guard edits.record(id) != nil else {
-                skipped += 1
-                continue
+        withUndoGroup(label: "Apply Location",
+                      labelFor: { "Apply Location (\(Self.photoCount($0)))" }) {
+            for id in batchOrder where id != master.id {
+                guard edits.record(id) != nil else {
+                    skipped += 1
+                    continue
+                }
+                updateLocation(id: id, lat: lat, lon: lon)
             }
-            updateLocation(id: id, lat: lat, lon: lon)
         }
         if skipped > 0 {
             debugLog.append("[batch] apply location skipped \(skipped) un-ingested image\(skipped == 1 ? "" : "s")")
@@ -471,13 +539,16 @@ final class AppState {
     func applyTimezoneToAll(_ tz: TZRule) {
         guard batchMode else { return }
         var skipped = 0
-        for id in batchOrder {
-            guard let record = edits.record(id) else {
-                skipped += 1
-                continue
+        withUndoGroup(label: "Apply Time Zone",
+                      labelFor: { "Apply Time Zone (\(Self.photoCount($0)))" }) {
+            for id in batchOrder {
+                guard let record = edits.record(id) else {
+                    skipped += 1
+                    continue
+                }
+                let resolved = timezoneResolved(tz, at: record.captureDate)
+                updateField(id: id, field: .timezone) { $0.timezone = resolved }
             }
-            let resolved = timezoneResolved(tz, at: record.captureDate)
-            updateField(id: id, field: .timezone) { $0.timezone = resolved }
         }
         if skipped > 0 {
             debugLog.append("[batch] apply timezone skipped \(skipped) un-ingested image\(skipped == 1 ? "" : "s")")
@@ -609,11 +680,156 @@ final class AppState {
     // (which recomputes the field's dirty bit) and then asks the saver
     // to refresh the status pill -- but does NOT trigger a save. That
     // only happens at image-session boundaries.
+    //
+    // Every mutation path in the app funnels through here, so this is also
+    // the single capture point for undo: snapshot before/after around the
+    // transform and record the change (unless we're replaying history, or
+    // the change is a semantic no-op).
     func updateField(id: String,
                      field: EditableField,
                      _ transform: (inout ImageRecord) -> Void) {
+        let before = edits.record(id)        // nil -> edits.update no-ops too
         edits.update(id, field: field, transform)
+        if !isRestoringHistory,
+           let before, let after = edits.record(id),
+           !field.equals(before, after) {
+            undo.record(id: id, field: field, before: before, after: after,
+                        label: "Edit \(field.displayName)")
+        }
         saver.dirtyChanged()
+    }
+
+    // MARK: - Undo / redo
+
+    // Collect every updateField inside `body` into ONE undo entry, so a
+    // batch operation undoes atomically. labelFor finalizes the label with
+    // the count of images actually changed (no-ops record nothing, so the
+    // count never overstates). mergeKey lets async streaming runs (enrich)
+    // fold adjacent groups from the same run into a single step.
+    func withUndoGroup(label: String,
+                       mergeKey: UUID? = nil,
+                       labelFor: ((Int) -> String)? = nil,
+                       _ body: () -> Void) {
+        undo.beginGroup(label: label, mergeKey: mergeKey)
+        body()
+        undo.endGroup(labelFor: labelFor)
+    }
+
+    func performUndo() {
+        // Peek before popping: leaving the batch needs confirmation, and a
+        // declined confirmation must leave the entry on the stack.
+        guard let next = undo.undoEntries.last else { return }
+        if historyLeavesBatch(next) {
+            guard confirmLeaveBatch(direction: "undo") else { return }
+        }
+        guard let entry = undo.popForUndo() else { return }
+        if historyLeavesBatch(entry) { exitBatchForHistory() }
+        apply(entry: entry, useBefore: true)
+        undo.pushUndone(entry)
+        surfaceHistoryResult(entry, verb: "Undid")
+    }
+
+    func performRedo() {
+        guard let next = undo.redoEntries.last else { return }
+        if historyLeavesBatch(next) {
+            guard confirmLeaveBatch(direction: "redo") else { return }
+        }
+        guard let entry = undo.popForRedo() else { return }
+        if historyLeavesBatch(entry) { exitBatchForHistory() }
+        apply(entry: entry, useBefore: false)
+        undo.pushRedone(entry)
+        surfaceHistoryResult(entry, verb: "Redid")
+    }
+
+    // An entry from outside the live batch session means the user has
+    // finished unwinding the batch's own history and the next step would
+    // walk older, non-batch changes.
+    private func historyLeavesBatch(_ entry: UndoEntry) -> Bool {
+        batchMode && entry.batchSession != undo.currentSession
+    }
+
+    // Exiting the batch via undo is irreversible (redo cannot resurrect the
+    // selection), so gate it on an explicit choice. The alert is modal:
+    // mashed Cmd+Z presses are swallowed while it is up, and "Stay in Batch"
+    // is the default button -- so holding/mashing undo unwinds every batch
+    // change, lands here, and a stray Return keeps the batch. That makes
+    // mash-Cmd+Z a legitimate "clear all batch changes" gesture.
+    private func confirmLeaveBatch(direction: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Leave the batch selection?"
+        alert.informativeText = """
+            The next \(direction) step changes images outside this batch. \
+            Continuing exits the batch selection, and redo cannot restore it. \
+            Staying keeps the batch; steps already \(direction == "undo" ? "undone" : "redone") are unaffected.
+            """
+        alert.addButton(withTitle: "Stay in Batch")   // default (Return)
+        alert.addButton(withTitle: "Leave Batch")
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    // Drop back to single-image browsing so each further history step is
+    // visible (surfaceHistoryResult selects the affected image).
+    //
+    // The stack is LIFO, so every batch-scoped entry -- including all draft
+    // typing -- sits above the boundary and has already been undone; the
+    // draft is therefore empty and discarding it loses nothing. Skipping
+    // synthesis (vs. exitBatch) also guarantees the exit can't push a fresh
+    // entry in the middle of an undo gesture. Member saves still fire,
+    // persisting whatever the unwinding restored.
+    private func exitBatchForHistory() {
+        let ids = batchOrder
+        batchOrder = []          // didSet clears undo.currentSession
+        batchDraft = BatchDraft()
+        undo.purgeDraftEntries()
+        for id in ids { saver.requestSave(id: id) }
+    }
+
+    private func apply(entry: UndoEntry, useBefore: Bool) {
+        isRestoringHistory = true
+        defer { isRestoringHistory = false }
+        if let draft = entry.draftChange, batchMode {
+            batchDraft = useBefore ? draft.before : draft.after
+        }
+        // Undo replays in reverse so stacked changes to the same field
+        // within one group unwind correctly; redo replays forward.
+        let ordered = useBefore ? entry.changes.reversed() : Array(entry.changes)
+        for change in ordered {
+            let snapshot = useBefore ? change.before : change.after
+            edits.update(change.id, field: change.field) { rec in
+                change.field.apply(from: snapshot, into: &rec)
+            }
+        }
+        saver.dirtyChanged()
+    }
+
+    // Make the result of an undo/redo visible. A single-image entry jumps
+    // to that image (unless we're in batch mode -- select() would exit the
+    // batch and synthesize the draft, far too destructive for an undo).
+    // Everything else gets a transient StatusBar toast.
+    private func surfaceHistoryResult(_ entry: UndoEntry, verb: String) {
+        // Draft steps revert visibly in the batch form itself.
+        if entry.draftChange != nil { return }
+        let ids = Set(entry.changes.map(\.id))
+        if ids.count == 1, let id = ids.first, !batchMode {
+            if selectedID != id { select(id) }
+            return
+        }
+        showUndoToast("\(verb) \(entry.label)")
+    }
+
+    private func showUndoToast(_ message: String) {
+        undoToastTask?.cancel()
+        undoToast = message
+        undoToastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.undoToast = nil
+        }
+    }
+
+    static func photoCount(_ n: Int) -> String {
+        "\(n) photo\(n == 1 ? "" : "s")"
     }
 
     // Map pin drag and GeoCells text commit both end here. Lat or lon nil

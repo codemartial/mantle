@@ -8,7 +8,7 @@
 
 import Foundation
 
-// The five user-mutable fields on ImageRecord. Each case defines its own
+// The six user-mutable fields on ImageRecord. Each case defines its own
 // semantic-equality test so the dirty-tracker in EditStore can decide
 // whether a field is "really" different from the last-saved baseline,
 // independent of cosmetic differences that fall out of load -> normalise
@@ -33,6 +33,35 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case .timezone:    return Self.timezoneEqual(a.timezone, b.timezone)
         case .location:    return Self.coordsEqual(a.latitude, a.longitude,
                                                    b.latitude, b.longitude)
+        }
+    }
+
+    // Copy this field's value from src into dst (location moves both
+    // coordinates together). Shared by EditStore.markSaved's baseline
+    // patching and the undo restore path.
+    func apply(from src: ImageRecord, into dst: inout ImageRecord) {
+        switch self {
+        case .headline:    dst.headline = src.headline
+        case .caption:     dst.caption = src.caption
+        case .keywords:    dst.keywords = src.keywords
+        case .captureDate: dst.captureDate = src.captureDate
+        case .timezone:    dst.timezone = src.timezone
+        case .location:
+            dst.latitude = src.latitude
+            dst.longitude = src.longitude
+        }
+    }
+
+    // UI nomenclature for undo labels: the panes label headline "Title"
+    // and caption "Description".
+    var displayName: String {
+        switch self {
+        case .headline:    return "Title"
+        case .caption:     return "Description"
+        case .keywords:    return "Keywords"
+        case .captureDate: return "Capture Date"
+        case .timezone:    return "Time Zone"
+        case .location:    return "Location"
         }
     }
 

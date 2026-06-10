@@ -36,6 +36,23 @@ struct StatusBar: View {
                 savedFlash
             }
 
+            if let toast = state.undoToast {
+                separator()
+                segment {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 8 * 1.15, weight: .bold))
+                        Text(toast)
+                            .font(.system(size: 11 * 1.15))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .foregroundStyle(Theme.fgDim)
+                    .frame(maxWidth: 320, alignment: .leading)
+                    .help(toast)
+                }
+            }
+
             Spacer(minLength: 0)
 
             segment {

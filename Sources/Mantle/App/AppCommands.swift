@@ -35,6 +35,24 @@ struct AppCommands: Commands {
     let state: AppState
 
     var body: some Commands {
+        // Replace the system undo items with the app's own history. Menu key
+        // equivalents resolve before the focused field editor sees Cmd+Z, so
+        // while these items are enabled the global stack always wins -- which
+        // is what we want, since every keystroke already flowed through
+        // updateField and coalescing restores the whole field via the binding.
+        CommandGroup(replacing: .undoRedo) {
+            Button(state.undo.undoMenuTitle) {
+                state.performUndo()
+            }
+            .keyboardShortcut("z", modifiers: .command)
+            .disabled(!state.undo.canUndo)
+
+            Button(state.undo.redoMenuTitle) {
+                state.performRedo()
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .disabled(!state.undo.canRedo)
+        }
         CommandGroup(replacing: .newItem) {
             Button("Open Folder...") {
                 FolderPicker.present { url in

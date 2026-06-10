@@ -59,24 +59,11 @@ final class EditStore {
         } else {
             var baseline = lastSaved[id]!
             for f in fields {
-                applyField(f, from: snapshot, into: &baseline)
+                f.apply(from: snapshot, into: &baseline)
             }
             lastSaved[id] = baseline
         }
         for f in fields { recomputeDirty(id: id, field: f) }
-    }
-
-    private func applyField(_ field: EditableField, from src: ImageRecord, into dst: inout ImageRecord) {
-        switch field {
-        case .headline:    dst.headline = src.headline
-        case .caption:     dst.caption = src.caption
-        case .keywords:    dst.keywords = src.keywords
-        case .captureDate: dst.captureDate = src.captureDate
-        case .timezone:    dst.timezone = src.timezone
-        case .location:
-            dst.latitude = src.latitude
-            dst.longitude = src.longitude
-        }
     }
 
     func dirtyFields(_ id: String) -> Set<EditableField> {

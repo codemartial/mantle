@@ -17,7 +17,7 @@ import Foundation
 // are edited directly on the master's ImageRecord through the same path as
 // single-mode editing. Only fields that need broadcasting across the whole
 // batch live here.
-struct BatchDraft {
+struct BatchDraft: Equatable {
 
     enum CaptionMode: Hashable { case replace, append }
 
@@ -32,5 +32,24 @@ struct BatchDraft {
 
     var dateShiftInterval: TimeInterval {
         TimeInterval(dateShiftHours * 3600 + dateShiftMinutes * 60)
+    }
+
+    // Which logical field differs between two drafts, for undo coalescing
+    // (consecutive changes to the same key merge into one step) and the
+    // Edit menu label. Caption mode + both caption texts share one key, so
+    // flipping replace/append and typing coalesce into a single undo step.
+    static func changedField(_ a: BatchDraft, _ b: BatchDraft) -> (key: String, label: String)? {
+        if a.headline != b.headline {
+            return ("headline", "Edit Batch Title")
+        }
+        if a.captionMode != b.captionMode
+            || a.captionReplace != b.captionReplace
+            || a.captionAppend != b.captionAppend {
+            return ("caption", "Edit Batch Description")
+        }
+        if a.dateShiftHours != b.dateShiftHours || a.dateShiftMinutes != b.dateShiftMinutes {
+            return ("dateShift", "Edit Batch Date Shift")
+        }
+        return nil
     }
 }
