@@ -41,9 +41,9 @@ struct LocationMap: View {
                 log: { [weak state] line in state?.debugLog.append(line) }
             )
 
-            if let layout, let dir = state.selectedRecord?.direction {
+            if let layout, state.selectedRecord?.direction != nil {
                 Canvas { ctx, _ in
-                    drawCone(in: ctx, at: layout, direction: dir)
+                    drawCone(in: ctx, at: layout)
                 }
                 .allowsHitTesting(false)
             }
@@ -54,17 +54,19 @@ struct LocationMap: View {
     }
 
     private func drawCone(in ctx: GraphicsContext,
-                          at layout: ConeLayout,
-                          direction: Double) {
+                          at layout: ConeLayout) {
         let center = layout.center
         let radius = layout.radius
         let half: Double = 30   // half-angle (degrees) -- 60-degree wedge
 
-        // SwiftUI/CG angle convention: 0deg points east (positive X), then
-        // clockwise in y-down coords. Compass bearing: 0deg north,
-        // clockwise. Convert: cgAngle = compass - 90.
-        let startAngle = Angle(degrees: direction - half - 90)
-        let endAngle   = Angle(degrees: direction + half - 90)
+        // The cone's centre direction is the layout's screen-space bearing:
+        // publishLayout projects the pin and a point one radius away along the
+        // GPS bearing, both through map.convert, so the angle already folds in
+        // the map's current heading. Rotate the map and the cone rotates with
+        // it -- no manual compass-to-screen conversion here.
+        let centre = Angle(radians: Double(layout.angle))
+        let startAngle = centre - Angle(degrees: half)
+        let endAngle   = centre + Angle(degrees: half)
 
         var path = Path()
         path.move(to: center)
@@ -118,6 +120,10 @@ struct LocationMap: View {
 struct ConeLayout: Equatable {
     let center: CGPoint
     let radius: CGFloat
+    // Cone centre direction in screen space (radians, CG y-down convention:
+    // 0 = +x). Derived from the projected pin-to-bearing-edge vector, so it
+    // tracks the map's rotation/heading automatically.
+    let angle: CGFloat
 }
 
 // MARK: - NSViewRepresentable
@@ -392,7 +398,11 @@ private final class Coordinator: NSObject, MKMapViewDelegate, NSGestureRecognize
         let dx = edgePoint.x - pinPoint.x
         let dy = edgePoint.y - pinPoint.y
         let radius = sqrt(dx * dx + dy * dy)
-        onLayout(ConeLayout(center: pinPoint, radius: radius))
+        // Screen-space bearing of the same projected vector. map.convert has
+        // already applied the camera heading, so atan2 here gives the cone a
+        // direction that rotates with the map.
+        let angle = atan2(dy, dx)
+        onLayout(ConeLayout(center: pinPoint, radius: radius, angle: angle))
     }
 
     private func logConeState(on map: MKMapView, record: ImageRecord?) {
