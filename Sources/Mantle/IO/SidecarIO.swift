@@ -87,6 +87,17 @@ enum SidecarIO {
 
         let keywords = resolveKeywords(from: json)
 
+        // XMP star rating. xmp:Rating is the cross-tool standard (Lightroom,
+        // Bridge, Photo Mechanic); the EXIF Rating tags are Microsoft's
+        // variant. -1 (rejected) and any out-of-range value clamp into 0...5,
+        // with 0 meaning unrated.
+        let rating = max(0, min(5, int(json,
+                                       "XMP-xmp:Rating",
+                                       "XMP:Rating",
+                                       "EXIF:Rating",
+                                       "IFD0:Rating",
+                                       "Rating")))
+
         // Timezone first -- needed to correctly parse offset-less date
         // strings (EXIF dates have no offset baked in; XMP dates do).
         //
@@ -225,7 +236,8 @@ enum SidecarIO {
             caption: caption,
             keywords: keywords,
             captureDate: captureDate,
-            timezone: tzRule
+            timezone: tzRule,
+            rating: rating
         )
     }
 }

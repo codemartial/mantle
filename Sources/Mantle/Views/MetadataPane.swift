@@ -167,6 +167,27 @@ struct MetadataPane: View {
                 .disabled(state.selectedID == nil)
                 .help("Re-read GPS from the image's embedded EXIF")
 
+                Button {
+                    GeoClipboard.copy(lat: record?.latitude, lon: record?.longitude)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .controlSize(.small)
+                .disabled(record?.latitude == nil || record?.longitude == nil)
+                .help("Copy coordinates")
+
+                Button {
+                    guard let id = state.selectedID,
+                          let pair = GeoClipboard.paste() else { return }
+                    state.updateLocation(id: id, lat: pair.lat, lon: pair.lon)
+                    state.recenterMap()
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .controlSize(.small)
+                .disabled(state.selectedID == nil)
+                .help("Paste coordinates from the clipboard")
+
                 Spacer()
 
                 altitudeBadge(record?.altitude)

@@ -58,6 +58,7 @@ enum ExifToolWriter {
         args += keywordArgs(record: record, fields: fields)
         args += dateAndTimeArgs(record: record, fields: fields)
         args += locationArgs(record: record, fields: fields)
+        args += ratingArgs(record: record, fields: fields)
 
         // Target sidecar. -o creates a fresh file from the supplied tags;
         // without -o, exiftool updates an existing file in place.
@@ -216,6 +217,16 @@ enum ExifToolWriter {
             String(format: "-XMP-exif:GPSLatitude=%.7f", lat),
             String(format: "-XMP-exif:GPSLongitude=%.7f", lon),
         ]
+    }
+
+    // XMP star rating. 0 means unrated -- emit an empty assignment so the
+    // sidecar's rating is scrubbed rather than pinned to 0, matching the
+    // clear-by-blank pattern the location and date writers use. xmp:Rating is
+    // the standard XMP element other tools read.
+    private static func ratingArgs(record: ImageRecord, fields: Set<EditableField>) -> [String] {
+        guard fields.contains(.rating) else { return [] }
+        let value = max(0, min(5, record.rating))
+        return value == 0 ? ["-XMP:Rating="] : ["-XMP:Rating=\(value)"]
     }
 
     private static func formatISO8601(_ date: Date, offsetMinutes: Int) -> String {

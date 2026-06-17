@@ -3,7 +3,7 @@
 Mantle is a native macOS app for reviewing and editing photo metadata. Point
 it at a folder of images, browse the thumbnails, and edit the descriptive
 fields that matter for cataloguing and licensing: title, caption, keywords,
-capture date and time zone, and GPS location. It reads and writes through
+star rating, capture date and time zone, and GPS location. It reads and writes through
 [ExifTool](https://exiftool.org), so it understands the same XMP, IPTC, and
 EXIF tags that Lightroom, Photo Mechanic, and Photoshop use, and it stores
 edits in XMP sidecar files so your original RAW and JPEG files are left
@@ -27,9 +27,11 @@ Batch mode: editing title, caption, keywords, and location across a selection:
 
 - Open any folder of photos and browse it as a thumbnail grid.
 - Edit the descriptive fields tools actually care about: Title, caption,
-  keywords, capture date and time zone, and GPS coordinates.
-- Place or move the location pin on a map, or type coordinates in decimal or
-  degrees-minutes-seconds.
+  keywords, star rating, capture date and time zone, and GPS coordinates.
+- Rate a photo from the editable star overlay on the preview; it round-trips
+  through the standard XMP rating other tools read.
+- Place or move the location pin on a map, type coordinates in decimal or
+  degrees-minutes-seconds, or copy and paste them between Mantle and a map.
 - Read-only view of the embedded EXIF (camera, lens, exposure) for reference.
 - Batch mode: select many images and apply edits across all of them at once.
 - Filter a large library by any attribute, with keyword autocomplete.

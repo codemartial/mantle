@@ -25,15 +25,14 @@ import AppKit
 
 struct LocationMap: View {
     @Environment(AppState.self) private var state
-    @State private var recenterToken: Int = 0
     @State private var layout: ConeLayout?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .topTrailing) {
             MapRepresentable(
                 record: state.selectedRecord,
                 mapStyle: state.mapStyle,
-                recenterToken: recenterToken,
+                recenterToken: state.mapRecenterTick,
                 onDrag: { lat, lon in
                     guard let id = state.selectedRecord?.id else { return }
                     state.updateLocation(id: id, lat: lat, lon: lon)
@@ -97,7 +96,7 @@ struct LocationMap: View {
 
     private var recenterButton: some View {
         Button {
-            recenterToken &+= 1
+            state.recenterMap()
         } label: {
             Image(systemName: "location.fill")
                 .font(.system(size: 11, weight: .medium))

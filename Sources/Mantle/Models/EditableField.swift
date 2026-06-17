@@ -23,6 +23,7 @@ enum EditableField: CaseIterable, Sendable, Hashable {
     case captureDate
     case timezone
     case location
+    case rating
 
     func equals(_ a: ImageRecord, _ b: ImageRecord) -> Bool {
         switch self {
@@ -33,6 +34,7 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case .timezone:    return Self.timezoneEqual(a.timezone, b.timezone)
         case .location:    return Self.coordsEqual(a.latitude, a.longitude,
                                                    b.latitude, b.longitude)
+        case .rating:      return a.rating == b.rating
         }
     }
 
@@ -49,6 +51,7 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case .location:
             dst.latitude = src.latitude
             dst.longitude = src.longitude
+        case .rating:      dst.rating = src.rating
         }
     }
 
@@ -62,6 +65,7 @@ enum EditableField: CaseIterable, Sendable, Hashable {
         case .captureDate: return "Capture Date"
         case .timezone:    return "Time Zone"
         case .location:    return "Location"
+        case .rating:      return "Rating"
         }
     }
 

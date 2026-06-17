@@ -7,6 +7,7 @@
 // <https://polyformproject.org/licenses/noncommercial/1.0.0>.
 
 import SwiftUI
+import AppKit
 
 // Editable lat / lon cells with derived hemisphere labels. Pasting a string
 // that contains a recognisable coordinate pair (decimal or DMS) fills both
@@ -337,5 +338,32 @@ enum CoordParser {
     private static func isLonHem(_ c: Character?) -> Bool {
         guard let c else { return false }
         return c == "E" || c == "W"
+    }
+}
+
+// MARK: - Clipboard
+
+// Copy / paste of a coordinate pair via the system pasteboard. Copy emits a
+// signed decimal "lat, lon" string -- the most portable, re-parseable form
+// (maps, spreadsheets, and CoordParser all read it). Paste runs the
+// clipboard text back through CoordParser, so it accepts decimal pairs, DMS,
+// and N/S/E/W-marked strings, not just what copy produced.
+enum GeoClipboard {
+    static func copy(lat: Double?, lon: Double?) {
+        guard let lat, let lon, lat.isFinite, lon.isFinite else { return }
+        let text = String(format: "%.6f, %.6f", lat, lon)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    }
+
+    // Returns a coordinate pair if the clipboard holds something parseable as
+    // one. A lone single value is rejected (it can't be assigned to lat vs lon
+    // unambiguously) so paste never half-fills the location.
+    static func paste() -> (lat: Double, lon: Double)? {
+        guard let raw = NSPasteboard.general.string(forType: .string),
+              let result = CoordParser.parse(raw),
+              let pair = result.pair else { return nil }
+        return (pair.lat, pair.lon)
     }
 }

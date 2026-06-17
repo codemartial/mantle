@@ -34,6 +34,11 @@ final class AppState {
         didSet { reconcileSelectionWithFilter() }
     }
 
+    // Browser-grid sort direction (filename only). Drives the order of
+    // `visibleLibrary`, so a shift-range selection always follows what the
+    // user sees. In-memory only -- defaults to ascending each launch.
+    var sortOrder: LibrarySortOrder = .nameAscending
+
     // Title + keywords for every file, read by a background sweep on folder
     // open (MetadataIndex). A missing id means not yet swept (treated as
     // unknown -- the file stays visible until classified); an empty headline
@@ -91,6 +96,11 @@ final class AppState {
     // visually snap a cleared cell back to its bound value when the
     // binding's wrappedValue itself never changed.
     var geoReseedTick: Int = 0
+
+    // Bumped to ask the LocationMap to recentre on the selected record's
+    // current pin. Driven by the map's recentre button and by a coordinate
+    // paste. Distinct from geoReseedTick, which re-seeds the GeoCells inputs.
+    var mapRecenterTick: Int = 0
 
     var mapStyle: MapStyleChoice = MapStyleChoice.load() {
         didSet { mapStyle.save() }
@@ -842,6 +852,21 @@ final class AppState {
         }
     }
 
+    // Star rating set from the preview overlay. Clamped to 0...5; 0 clears
+    // the rating. Routes through updateField so it dirties, saves, and undoes
+    // like every other field.
+    func updateRating(id: String, to value: Int) {
+        let clamped = max(0, min(5, value))
+        updateField(id: id, field: .rating) { $0.rating = clamped }
+    }
+
+    // Ask the LocationMap to recentre on the selected record's pin. The map
+    // observes mapRecenterTick and pans to the current coordinate when it
+    // changes. Used by the recentre button and after a coordinate paste.
+    func recenterMap() {
+        mapRecenterTick &+= 1
+    }
+
     // Called by SaveCoordinator after a successful write. If a fresh
     // sidecar was created, patch the matching LibraryEntry so the status
     // bar's ".xmp sidecar (new)" pill drops the "(new)".
@@ -972,23 +997,39 @@ final class AppState {
     }
 
     // The entries the browser grid renders. Applies the active filter with
-    // the .all / .any combinator. An undecidable (nil) attribute result does
-    // NOT hide the file while the sweep is still loading -- it's treated as a
-    // pass so files stay visible and re-filter reactively as titles arrive.
+    // the .all / .any combinator, then the current sort order. An undecidable
+    // (nil) attribute result does NOT hide the file while the sweep is still
+    // loading -- it's treated as a pass so files stay visible and re-filter
+    // reactively as titles arrive.
     var visibleLibrary: [LibraryEntry] {
-        guard filter.isActive else { return library }
-        let active = filter.activeAttributes
-        return library.filter { entry in
-            switch filter.combine {
-            case .all:
-                return active.allSatisfy { attr in
-                    matches(entry, attr, filter.status(attr)) ?? true
-                }
-            case .any:
-                return active.contains { attr in
-                    matches(entry, attr, filter.status(attr)) == true
+        let filtered: [LibraryEntry] = {
+            guard filter.isActive else { return library }
+            let active = filter.activeAttributes
+            return library.filter { entry in
+                switch filter.combine {
+                case .all:
+                    return active.allSatisfy { attr in
+                        matches(entry, attr, filter.status(attr)) ?? true
+                    }
+                case .any:
+                    return active.contains { attr in
+                        matches(entry, attr, filter.status(attr)) == true
+                    }
                 }
             }
+        }()
+        return sorted(filtered)
+    }
+
+    // Order entries by filename per the current sort direction. LibraryIndex
+    // already scans in ascending name order, but sorting here keeps the grid
+    // and shift-range selection consistent regardless of scan order.
+    private func sorted(_ entries: [LibraryEntry]) -> [LibraryEntry] {
+        entries.sorted { a, b in
+            let cmp = a.basename.localizedCaseInsensitiveCompare(b.basename)
+            return sortOrder == .nameAscending
+                ? cmp == .orderedAscending
+                : cmp == .orderedDescending
         }
     }
 

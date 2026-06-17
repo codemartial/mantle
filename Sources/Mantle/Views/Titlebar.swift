@@ -21,7 +21,7 @@ import AppKit
 // Scope notes:
 //   - folder picker is interactive (opens NSOpenPanel via FolderPicker)
 //   - the filter button opens FilterPanel (real, drives BrowserPane)
-//   - sort is still visual-only (no onClick / onChange)
+//   - sort toggles state.sortOrder (asc / desc filename), driving the grid
 //
 // The bar is 44pt to match .titlebar { height: 44px } in styles.css.
 
@@ -118,20 +118,25 @@ struct Titlebar: View {
         state.folderURL?.path ?? "Open folder... (Cmd+O)"
     }
 
-    // MARK: - Sort (visual only)
+    // MARK: - Sort (filename asc / desc)
 
     private var sortButton: some View {
-        Image(systemName: "arrow.up.arrow.down")
-            .font(.system(size: 11 * 1.15))
-            .foregroundStyle(Theme.fg)
-            .frame(width: 26, height: 24)
-            .background(Theme.bgElev)
-            .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(Theme.line2, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .help("Sort")
+        Button {
+            state.sortOrder = state.sortOrder.toggled
+        } label: {
+            Image(systemName: state.sortOrder.symbolName)
+                .font(.system(size: 11 * 1.15))
+                .foregroundStyle(Theme.fg)
+                .frame(width: 26, height: 24)
+                .background(Theme.bgElev)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(Theme.line2, lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
+        .buttonStyle(.plain)
+        .help(state.sortOrder.help)
     }
 
     // MARK: - Filter

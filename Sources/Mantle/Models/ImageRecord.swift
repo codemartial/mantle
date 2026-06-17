@@ -41,6 +41,8 @@ struct ImageRecord: Identifiable, Hashable, Sendable {
     var keywords: [String]
     var captureDate: Date?
     var timezone: TZRule
+    // XMP star rating, 0...5. 0 means unrated (the tag is cleared on save).
+    var rating: Int
 
     static func == (lhs: ImageRecord, rhs: ImageRecord) -> Bool {
         lhs.id == rhs.id &&

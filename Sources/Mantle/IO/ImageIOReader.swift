@@ -125,7 +125,11 @@ enum ImageIOReader {
             caption: caption,
             keywords: keywords,
             captureDate: captureDate,
-            timezone: .unknown
+            timezone: .unknown,
+            // ImageIO doesn't surface XMP rating; the ExifTool path (the
+            // default) reads it. This fallback only runs when ExifTool
+            // resources can't be resolved.
+            rating: 0
         )
     }
 }

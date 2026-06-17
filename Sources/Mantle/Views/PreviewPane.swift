@@ -15,11 +15,40 @@ struct PreviewPane: View {
         ZStack {
             if let entry = state.selectedEntry {
                 ZoomablePreview(url: entry.displayURL)
+                // Rating overlay rides the same bottom row as the zoom
+                // controls (toolbar at the leading corner, % readout at the
+                // trailing one), centred between them so it never overlaps the
+                // photo's working area. Only shown once the record is ingested
+                // (so a rating is actually editable).
+                if state.selectedRecord != nil {
+                    VStack {
+                        Spacer()
+                        ratingOverlay
+                            .padding(.bottom, 16)
+                    }
+                }
             } else {
                 Text("Select an image")
                     .font(.system(size: 14 * 1.15, weight: .medium))
                     .foregroundStyle(Theme.fgMute)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var ratingOverlay: some View {
+        if let id = state.selectedID, let record = state.selectedRecord {
+            RatingStars(rating: record.rating) { newValue in
+                state.updateRating(id: id, to: newValue)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.45))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 }
