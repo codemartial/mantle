@@ -10,7 +10,6 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var state
-    @FocusState private var keyboardFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,39 +39,15 @@ struct RootView: View {
         .acceptingFolderDrop { url in
             state.openFolder(url)
         }
-        // The root is the lowest-priority key handler: Esc exits a batch,
-        // arrows walk the browser. onKeyPress only fires while this view holds
-        // focus, so we make it focusable and claim focus on launch -- without
-        // that the window itself is first responder and bare arrow / Esc keys
-        // go nowhere. A focused text field (cursor movement) or the map (pan)
-        // still gets the key first; it only bubbles up here when nothing else
-        // consumes it.
-        //
-        // No focusEffectDisabled here: it propagates to descendants and would
-        // strip the focus ring off the text fields too. A container focusable
-        // like this doesn't draw a visible ring for pointer users.
+        // Esc collapses an in-progress batch: synthesize + save all dirty,
+        // then land on the master. No-op when not in batch.
         .focusable()
-        .focused($keyboardFocused)
-        .defaultFocus($keyboardFocused, true)
-        .onAppear {
-            // defaultFocus declares the intent; re-assert once after the first
-            // layout because macOS sometimes lands first-responder on the
-            // window rather than the focusable content at launch.
-            DispatchQueue.main.async { keyboardFocused = true }
-        }
         .onKeyPress(.escape) {
             if state.batchMode {
                 state.exitBatch(selecting: state.masterID)
                 return .handled
             }
             return .ignored
-        }
-        // down / right -> next image, up / left -> previous.
-        .onKeyPress(keys: [.downArrow, .rightArrow]) { _ in
-            state.selectAdjacent(1) ? .handled : .ignored
-        }
-        .onKeyPress(keys: [.upArrow, .leftArrow]) { _ in
-            state.selectAdjacent(-1) ? .handled : .ignored
         }
     }
 }

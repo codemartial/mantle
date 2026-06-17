@@ -249,28 +249,6 @@ final class AppState {
         ingestIfNeeded(id)
     }
 
-    // Browser keyboard nav: step the single selection forward (+1) or back
-    // (-1) through the visible (filtered + sorted) grid order. No-op in batch
-    // mode or with an empty grid; clamps at the ends. With no current
-    // selection it lands on the first (forward) or last (back) image. Returns
-    // false when nav doesn't apply, so the key handler can let the key fall
-    // through instead of swallowing it.
-    @discardableResult
-    func selectAdjacent(_ step: Int) -> Bool {
-        guard !batchMode else { return false }
-        let ids = visibleLibrary.map { $0.id }
-        guard !ids.isEmpty else { return false }
-        if let current = selectedID, let idx = ids.firstIndex(of: current) {
-            let target = idx + step
-            if target >= 0, target < ids.count, ids[target] != current {
-                select(ids[target])
-            }
-        } else {
-            select(step > 0 ? ids[0] : ids[ids.count - 1])
-        }
-        return true
-    }
-
     // MARK: - Batch selection
 
     var batchMode: Bool { batchOrder.count >= 2 }
