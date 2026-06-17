@@ -7,6 +7,7 @@
 // <https://polyformproject.org/licenses/noncommercial/1.0.0>.
 
 import SwiftUI
+import AppKit
 
 // Headline + caption editors anchored below the preview in the center pane.
 // Labels sit ABOVE their inputs (not beside them, as the JSX did) so the
@@ -24,6 +25,11 @@ struct CaptionBlock: View {
 
     private let headlineWarnAt: Int = 36
     private let headlineOverAt: Int = 40
+
+    // Shift+Tab is delivered as the back-tab control character (U+0019),
+    // not as .tab with a shift modifier, so the Tab handler below has to
+    // match it explicitly to advance focus backward out of the editor.
+    private let backTab = Character("\u{19}")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -105,6 +111,22 @@ struct CaptionBlock: View {
         // 8pt vertical + ~0pt internal -> ~8pt visible inset.
         TextEditor(text: captionBinding)
             .focused($focus, equals: .caption)
+            // TextEditor wraps a multi-line NSTextView, which inserts a tab
+            // character on Tab -- unlike a single-line TextField, whose field
+            // editor maps Tab to "advance focus". Intercept Tab / back-tab
+            // here (onKeyPress fires before the text view's own insertTab:)
+            // and drive the window's key-view loop so they move to the next /
+            // previous control instead of typing into the editor.
+            .onKeyPress(keys: [.tab, KeyEquivalent(backTab)]) { press in
+                let goBack = press.modifiers.contains(.shift)
+                    || press.key.character == backTab
+                if goBack {
+                    NSApp.keyWindow?.selectPreviousKeyView(nil)
+                } else {
+                    NSApp.keyWindow?.selectNextKeyView(nil)
+                }
+                return .handled
+            }
             .font(.system(size: 11 * 1.15))
             .foregroundStyle(Theme.fgMute)
             .scrollContentBackground(.hidden)
