@@ -33,28 +33,44 @@ struct BrowserPane: View {
     }
 
     private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(state.visibleLibrary) { entry in
-                    ThumbnailCell(
-                        entry: entry,
-                        isSelected: !state.batchMode && state.selectedID == entry.id,
-                        batchIndex: batchIndex(for: entry.id),
-                        cache: state.thumbs
-                    )
-                    .onTapGesture {
-                        let mods = NSEvent.modifierFlags
-                        if mods.contains(.shift) {
-                            state.selectRange(to: entry.id)
-                        } else if mods.contains(.command) {
-                            state.toggleBatch(entry.id)
-                        } else {
-                            state.select(entry.id)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                    ForEach(state.visibleLibrary) { entry in
+                        ThumbnailCell(
+                            entry: entry,
+                            isSelected: !state.batchMode && state.selectedID == entry.id,
+                            batchIndex: batchIndex(for: entry.id),
+                            cache: state.thumbs
+                        )
+                        .onTapGesture {
+                            let mods = NSEvent.modifierFlags
+                            if mods.contains(.shift) {
+                                state.selectRange(to: entry.id)
+                            } else if mods.contains(.command) {
+                                state.toggleBatch(entry.id)
+                            } else {
+                                state.select(entry.id)
+                            }
                         }
                     }
                 }
+                .padding(8)
             }
-            .padding(8)
+            // Keep the selected thumbnail on-screen. Reveals the restored
+            // selection at launch (it can be far down a large folder) and
+            // follows arrow-key navigation to the grid edges. scrollTo with a
+            // nil anchor moves the minimum distance and no-ops when the cell is
+            // already fully visible, so ordinary clicks don't jump the grid.
+            // initial: true fires once on appear for a selection already set.
+            .onChange(of: state.selectedID, initial: true) { _, id in
+                guard let id else { return }
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        proxy.scrollTo(id)
+                    }
+                }
+            }
         }
     }
 
