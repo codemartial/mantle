@@ -67,6 +67,10 @@ private struct ZoomablePreview: View {
     @State private var image: NSImage?
     @State private var loadingURL: URL?
     @State private var pixelSize: CGSize = .zero
+    // True once load() finds the primary file gone from disk. Distinct from
+    // image == nil (still loading) so the pane can show an explicit "File
+    // Missing" state instead of an endless spinner.
+    @State private var isMissing = false
 
     @State private var isFit = true
     @State private var scale: CGFloat = 1
@@ -102,6 +106,9 @@ private struct ZoomablePreview: View {
                         .onTapGesture(count: 2, coordinateSpace: .local) { loc in
                             toggle(at: loc, fit: fit, container: container)
                         }
+                } else if isMissing {
+                    missingView
+                        .frame(width: container.width, height: container.height)
                 } else {
                     ProgressView()
                         .controlSize(.small)
@@ -112,9 +119,11 @@ private struct ZoomablePreview: View {
                 VStack {
                     Spacer()
                     HStack {
-                        zoomToolbar
-                            .padding(.leading, 16)
-                            .padding(.bottom, 16)
+                        if image != nil {
+                            zoomToolbar
+                                .padding(.leading, 16)
+                                .padding(.bottom, 16)
+                        }
                         Spacer()
                         if image != nil {
                             zoomReadout(eff: eff)
@@ -284,7 +293,18 @@ private struct ZoomablePreview: View {
 
     private func load() async {
         loadingURL = url
+        isMissing = false
         let snapshot = url
+        // Revalidate the primary file before decoding. A file deleted while
+        // open still yields a lazy CGImageSource (image count 0), so without
+        // this the decode just returns nil and the pane would spin forever.
+        guard FileManager.default.fileExists(atPath: snapshot.path) else {
+            guard loadingURL == snapshot else { return }
+            image = nil
+            pixelSize = .zero
+            isMissing = true
+            return
+        }
         let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
         let loaded: NSImage? = await Task.detached(priority: .userInitiated) {
             ImageIOFastThumb.makePreview(url: snapshot, maxPixelSide: 3600, scale: scaleFactor)
@@ -296,6 +316,25 @@ private struct ZoomablePreview: View {
         isFit = true
         scale = 1
         offset = .zero
+    }
+
+    // Shown when the primary file is gone from disk. Styled like the
+    // "Select an image" empty state; the in-memory metadata stays editable in
+    // the right pane, so this only signals the pixels are unavailable.
+    private var missingView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "photo.badge.exclamationmark")
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(Theme.fgMute)
+            Text("File Missing")
+                .font(.system(size: 14 * 1.15, weight: .medium))
+                .foregroundStyle(Theme.fgMute)
+            Text("\(url.lastPathComponent) was removed or moved -- rescan the folder to update.")
+                .font(.system(size: 11 * 1.15))
+                .foregroundStyle(Theme.fgDim)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+        }
     }
 
     private static func pixelSize(_ img: NSImage) -> CGSize {

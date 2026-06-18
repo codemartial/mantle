@@ -114,8 +114,14 @@ final class SaveCoordinator {
         switch result {
         case .success(let res):
             state.edits.markSaved(id, fields: fields, snapshot: snapshot)
-            state.adoptSidecar(id: id, url: res.sidecar)
-            state.debugLog.append(String(format: "[ok %.2fs] %@", res.duration, res.command))
+            // nil sidecar means nothing was written (no dirty fields, or the
+            // primary file is gone) -- don't claim a sidecar that isn't there.
+            if let side = res.sidecar {
+                state.adoptSidecar(id: id, url: side)
+                state.debugLog.append(String(format: "[ok %.2fs] %@", res.duration, res.command))
+            } else {
+                state.debugLog.append("[ok] metadata retained (no file written)")
+            }
             state.status = .saved
             scheduleSavedRevert()
             log.debug("save ok: \(id, privacy: .public)")

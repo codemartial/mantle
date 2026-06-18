@@ -166,13 +166,17 @@ enum ImageIOFastThumb {
             return wrap(cg, scale: scale)
         }
 
-        // Try higher indices (multi-image RAWs).
+        // Try higher indices (multi-image RAWs). A deleted or empty file can
+        // still yield a (lazy) source whose count is 0, so guard the range:
+        // `1..<0` would trap.
         let count = CGImageSourceGetCount(source)
         var best: CGImage?
-        for i in 1..<count {
-            guard let cg = CGImageSourceCreateThumbnailAtIndex(source, i, opts as CFDictionary) else { continue }
-            if let cur = best, cg.width <= cur.width { continue }
-            best = cg
+        if count > 1 {
+            for i in 1..<count {
+                guard let cg = CGImageSourceCreateThumbnailAtIndex(source, i, opts as CFDictionary) else { continue }
+                if let cur = best, cg.width <= cur.width { continue }
+                best = cg
+            }
         }
         if let best { return wrap(best, scale: scale) }
 

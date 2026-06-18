@@ -41,6 +41,7 @@ struct Titlebar: View {
         HStack(spacing: 14) {
             divider
             folderButton
+            rescanButton
             sortButton
 
             Spacer(minLength: 8)
@@ -116,6 +117,28 @@ struct Titlebar: View {
 
     private var folderHelp: String {
         state.folderURL?.path ?? "Open folder... (Cmd+O)"
+    }
+
+    // MARK: - Rescan current folder
+
+    private var rescanButton: some View {
+        Button {
+            state.rescan()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 11 * 1.15))
+                .foregroundStyle(state.folderURL == nil ? Theme.fgFaint : Theme.fg)
+                .frame(width: 26, height: 24)
+                .background(Theme.bgElev)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(Theme.line2, lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
+        .buttonStyle(.plain)
+        .disabled(state.folderURL == nil)
+        .help("Rescan folder")
     }
 
     // MARK: - Sort (filename asc / desc)

@@ -129,6 +129,10 @@ final class AppState {
     // happens inside performOpenFolder.
     private var autoSelectOnScan: Bool = false
     private var preferredSelectionID: String?
+    // When the preferred id isn't in the freshly scanned library, fall back to
+    // selecting the first entry. True for a plain open; false for rescan, where
+    // a vanished selection should land on nothing rather than jumping.
+    private var fallbackToFirstOnScan: Bool = true
 
     init() {
         self.saver = SaveCoordinator(state: self)
@@ -140,7 +144,17 @@ final class AppState {
         }
     }
 
-    func openFolder(_ url: URL, autoSelect: Bool = false, preferredID: String? = nil) {
+    // Re-open the current folder: full reset + rescan, keeping the current
+    // selection if its file survives (otherwise no selection). Reuses
+    // openFolder so the flush-then-reset pipeline persists pending edits first.
+    func rescan() {
+        guard let url = folderURL else { return }
+        openFolder(url, autoSelect: true, preferredID: selectedID,
+                   fallbackToFirst: false)
+    }
+
+    func openFolder(_ url: URL, autoSelect: Bool = false, preferredID: String? = nil,
+                    fallbackToFirst: Bool = true) {
         // Flush any pending saves from the previous folder before resetting
         // the edit store. The UI doesn't visibly change until performOpen
         // -- the user just sees a brief "Saving..." pill if needed. If a
@@ -150,11 +164,13 @@ final class AppState {
             guard let self else { return }
             self.exitBatch(selecting: nil)
             await self.saver.flushAll()
-            self.performOpenFolder(url, autoSelect: autoSelect, preferredID: preferredID)
+            self.performOpenFolder(url, autoSelect: autoSelect, preferredID: preferredID,
+                                   fallbackToFirst: fallbackToFirst)
         }
     }
 
-    private func performOpenFolder(_ url: URL, autoSelect: Bool, preferredID: String?) {
+    private func performOpenFolder(_ url: URL, autoSelect: Bool, preferredID: String?,
+                                   fallbackToFirst: Bool) {
         folderURL = url
         FolderBookmark.save(url)
         selectedID = nil
@@ -172,6 +188,7 @@ final class AppState {
         undoToast = nil
         autoSelectOnScan = autoSelect
         preferredSelectionID = preferredID
+        fallbackToFirstOnScan = fallbackToFirst
         scan(url)
     }
 
@@ -220,7 +237,7 @@ final class AppState {
             select(preferred)
             return
         }
-        if let first = library.first {
+        if fallbackToFirstOnScan, let first = library.first {
             select(first.id)
         }
     }

@@ -20,7 +20,10 @@ private let log = Logger(subsystem: "com.tahirhashmi.mantle", category: "writer"
 enum ExifToolWriter {
 
     struct WriteResult {
-        let sidecar: URL
+        // The sidecar that exists on disk after this write, or nil when
+        // nothing was written (no dirty fields, or the primary file is gone
+        // -- see write()). nil means "do not adopt a sidecar for this id".
+        let sidecar: URL?
         let command: String        // shell-escaped, copy-pasteable
         let duration: TimeInterval
     }
@@ -34,7 +37,17 @@ enum ExifToolWriter {
         let sidecar = sidecarPath(for: record.file)
 
         guard !fields.isEmpty else {
-            return .success(WriteResult(sidecar: sidecar, command: "", duration: 0))
+            return .success(WriteResult(sidecar: nil, command: "", duration: 0))
+        }
+
+        // If the primary file was deleted while open, treat the write as a
+        // successful no-op: skip the exiftool spawn (so we never create an
+        // orphan .xmp next to a file that no longer exists) but still report
+        // success so the session marks the metadata saved. This keeps batch
+        // exit -- which fires a save per member -- coherent when one member's
+        // file is gone.
+        guard FileManager.default.fileExists(atPath: record.file.path) else {
+            return .success(WriteResult(sidecar: nil, command: "", duration: 0))
         }
 
         guard let exiftool = ExifToolOneShot.exiftoolBinaryURL(),

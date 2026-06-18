@@ -32,5 +32,13 @@ let package = Package(
                 .swiftLanguageMode(.v6),
             ]
         ),
+        .testTarget(
+            name: "MantleTests",
+            dependencies: ["Mantle"],
+            path: "Tests/MantleTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
     ]
 )
