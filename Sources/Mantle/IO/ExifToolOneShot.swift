@@ -205,6 +205,10 @@ enum ExifToolOneShot {
     // so the first metadata read used to trap. We resolve the resource
     // bundle ourselves across the real candidate locations and return nil
     // (callers handle it) instead of crashing.
+    // Token whose containing bundle is Mantle's compiled-code bundle, used to
+    // locate the SwiftPM resource bundle when Bundle.main is not the app.
+    private final class BundleToken {}
+
     private static let resourceBundle: Bundle? = {
         let bundleName = "Mantle_Mantle.bundle"
         var bases: [URL] = []
@@ -213,6 +217,16 @@ enum ExifToolOneShot {
         if let exe = Bundle.main.executableURL?.deletingLastPathComponent() {
             bases.append(exe)                                    // .app/Contents/MacOS
         }
+        // Also search relative to the bundle that actually holds this code.
+        // Under `swift test` (and any other host where Bundle.main is not the
+        // app -- e.g. the xctest runner) the resource bundle sits next to the
+        // code bundle, not next to Bundle.main. In the packaged .app these
+        // resolve to the same locations the Bundle.main bases already cover,
+        // so this only adds reach; it never changes app behaviour.
+        let codeBundle = Bundle(for: BundleToken.self)
+        if let r = codeBundle.resourceURL { bases.append(r) }
+        bases.append(codeBundle.bundleURL)
+        bases.append(codeBundle.bundleURL.deletingLastPathComponent())
         for base in bases {
             if let bundle = Bundle(url: base.appendingPathComponent(bundleName)) {
                 return bundle
