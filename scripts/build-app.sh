@@ -14,6 +14,18 @@ cd "$(dirname "$0")/.."
 
 "$(dirname "$0")/ensure-exiftool.sh"
 
+# Gate the release on the full test suite (tier 1 + tier 2). Building a DMG is
+# "cutting a release", and a release should never ship from code that fails its
+# tests -- `set -e` aborts here on any failure. ExifTool is already fetched
+# above, so the round-trip tests run for real rather than skipping. Set
+# SKIP_TESTS=1 to bypass (e.g. a quick local packaging check).
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+    echo "==> SKIP_TESTS=1 set, skipping the test gate"
+else
+    echo "==> swift test (full suite -- release gate)"
+    swift test
+fi
+
 CONFIG="${CONFIG:-release}"
 APP="dist/Mantle.app"
 BIN_NAME="Mantle"
