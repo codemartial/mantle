@@ -17,11 +17,13 @@ import Foundation
 // types here stay generic.
 
 // How an attribute's "match" status behaves: no match status (binary
-// attribute), a free-text substring box, or a list of keyword chips.
+// attribute), a free-text substring box, a list of keyword chips, or a
+// rating picker.
 enum MatchMode {
     case none
     case text
     case chips
+    case ratings
 }
 
 // One keyword chip in a chip-match filter. An include chip means the file
@@ -35,6 +37,7 @@ struct FilterChip: Equatable, Hashable {
 enum FilterAttribute: String, CaseIterable, Identifiable {
     case xmp        // .xmp sidecar presence -- binary, no match status
     case headline   // title -- free-text match
+    case rating     // XMP star rating -- any / none / selected stars
     case keywords   // subject tags -- chip match (include / exclude)
 
     var id: String { rawValue }
@@ -43,6 +46,7 @@ enum FilterAttribute: String, CaseIterable, Identifiable {
         switch self {
         case .xmp:      return "XMP sidecar"
         case .headline: return "Title"
+        case .rating:   return "Rating"
         case .keywords: return "Keywords"
         }
     }
@@ -51,6 +55,7 @@ enum FilterAttribute: String, CaseIterable, Identifiable {
         switch self {
         case .xmp:      return .none
         case .headline: return .text
+        case .rating:   return .ratings
         case .keywords: return .chips
         }
     }
@@ -67,15 +72,18 @@ enum AttributeFilter: Equatable {
     case absent             // cross -- file is missing the attribute
     case matches(String)    // search box -- text attributes only
     case chips([FilterChip]) // chip editor -- keyword attributes only
+    case ratings(Set<Int>)  // selected star ratings; individual stars OR together
 
-    // A match status with no usable input (empty text / no non-blank chips)
-    // is treated as inert, same as ignore, so it doesn't hide everything.
+    // A match status with no usable input (empty text / no non-blank chips /
+    // no stars) is treated as inert, same as ignore, so it doesn't hide
+    // everything.
     var constrains: Bool {
         switch self {
         case .ignore:           return false
         case .present, .absent: return true
         case .matches(let q):   return !q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .chips(let c):     return c.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        case .ratings(let r):   return r.contains { (1...5).contains($0) }
         }
     }
 }

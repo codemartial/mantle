@@ -53,6 +53,36 @@ final class FilterAndSortTests: XCTestCase {
         XCTAssertEqual(state.visibleLibrary.map(\.id), ["/b.jpg"])
     }
 
+    // MARK: - Rating
+
+    func testRatingAnyAndNone() {
+        let state = makeState(
+            records: [Fix.record(id: "/a.jpg", rating: 3),
+                      Fix.record(id: "/b.jpg", rating: 0)],
+            library: [Fix.entry(id: "/a.jpg"), Fix.entry(id: "/b.jpg")])
+
+        state.filter = LibraryFilter(statuses: [.rating: .present])
+        XCTAssertEqual(state.visibleLibrary.map(\.id), ["/a.jpg"])
+
+        state.filter = LibraryFilter(statuses: [.rating: .absent])
+        XCTAssertEqual(state.visibleLibrary.map(\.id), ["/b.jpg"])
+    }
+
+    func testRatingStarsAreIndependentOrSelection() {
+        let state = makeState(
+            records: [Fix.record(id: "/one.jpg", rating: 1),
+                      Fix.record(id: "/three.jpg", rating: 3),
+                      Fix.record(id: "/five.jpg", rating: 5),
+                      Fix.record(id: "/none.jpg", rating: 0)],
+            library: [Fix.entry(id: "/one.jpg"),
+                      Fix.entry(id: "/three.jpg"),
+                      Fix.entry(id: "/five.jpg"),
+                      Fix.entry(id: "/none.jpg")])
+
+        state.filter = LibraryFilter(statuses: [.rating: .ratings([1, 5])])
+        XCTAssertEqual(state.visibleLibrary.map(\.id), ["/five.jpg", "/one.jpg"])
+    }
+
     // MARK: - Keywords (chip include / exclude)
 
     func testKeywordChipsIncludeAndExclude() {

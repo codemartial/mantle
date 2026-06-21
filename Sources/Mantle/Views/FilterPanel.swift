@@ -62,13 +62,19 @@ struct FilterPanel: View {
     private func row(_ attr: FilterAttribute) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                statusControl(attr)
-                Text(attr.label)
-                    .font(.system(size: 12 * 1.15))
-                    .foregroundStyle(Theme.fg)
+                if attr == .rating {
+                    ratingControl
+                } else {
+                    statusControl(attr)
+                }
+                if attr != .rating {
+                    Text(attr.label)
+                        .font(.system(size: 12 * 1.15))
+                        .foregroundStyle(Theme.fg)
+                }
                 Spacer(minLength: 0)
             }
-            if isMatching(attr) {
+            if attr != .rating && isMatching(attr) {
                 switch attr.matchMode {
                 case .text:
                     TextField("Contains text...", text: matchText(attr))
@@ -87,6 +93,8 @@ struct FilterPanel: View {
                 case .chips:
                     ChipEditor(chips: chipsBinding(attr), vocabulary: state.keywordVocabulary)
                         .padding(.leading, 4)
+                case .ratings:
+                    EmptyView()
                 case .none:
                     EmptyView()
                 }
@@ -131,6 +139,60 @@ struct FilterPanel: View {
         .help(kind.help)
     }
 
+    // MARK: - Rating control
+
+    private var ratingControl: some View {
+        HStack(spacing: 2) {
+            ratingStatusSegment(.ignore, help: "Ignore rating")
+            ratingStatusSegment(.present, help: "Any rating")
+            ratingStatusSegment(.absent, help: "No rating")
+            ForEach(1...5, id: \.self) { rating in
+                ratingStarSegment(rating)
+            }
+        }
+        .padding(2)
+        .background(Theme.bgInput)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Theme.line1, lineWidth: 0.5)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func ratingStatusSegment(_ kind: StatusKind, help: String) -> some View {
+        let selected = currentKind(.rating) == kind
+        return Button {
+            apply(kind, to: .rating)
+        } label: {
+            Image(systemName: kind.symbol)
+                .font(.system(size: 11 * 1.15, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? kind.selectedFg : Theme.fgMute)
+                .frame(width: 24, height: 22)
+                .background(selected ? kind.selectedBg : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private func ratingStarSegment(_ rating: Int) -> some View {
+        let selected = selectedRatings.contains(rating)
+        return Button {
+            toggleRating(rating)
+        } label: {
+            Image(systemName: selected ? "star.fill" : "star")
+                .font(.system(size: 11 * 1.15, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Theme.warn : Theme.fgMute)
+                .frame(width: 24, height: 22)
+                .background(selected ? Theme.warn.opacity(0.16) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(selected ? "Remove \(rating)-star rating" : "Match \(rating)-star rating")
+    }
+
     // MARK: - Status kinds
 
     // The selectable statuses, in display order. Binary attributes drop the
@@ -145,6 +207,7 @@ struct FilterPanel: View {
         case .present:          return .present
         case .absent:           return .absent
         case .matches, .chips:  return .matches
+        case .ratings:          return .matches
         }
     }
 
@@ -166,10 +229,31 @@ struct FilterPanel: View {
             case .chips:
                 if case .chips = state.filter.status(attr) { return }
                 state.filter.statuses[attr] = .chips([])
+            case .ratings:
+                if case .ratings = state.filter.status(attr) { return }
+                state.filter.statuses[attr] = .ratings([])
             case .none:
                 break
             }
         }
+    }
+
+    private var selectedRatings: Set<Int> {
+        if case .ratings(let ratings) = state.filter.status(.rating) {
+            return Set(ratings.filter { (1...5).contains($0) })
+        }
+        return []
+    }
+
+    private func toggleRating(_ rating: Int) {
+        guard (1...5).contains(rating) else { return }
+        var ratings = selectedRatings
+        if ratings.contains(rating) {
+            ratings.remove(rating)
+        } else {
+            ratings.insert(rating)
+        }
+        state.filter.statuses[.rating] = ratings.isEmpty ? .ignore : .ratings(ratings)
     }
 
     private func matchText(_ attr: FilterAttribute) -> Binding<String> {

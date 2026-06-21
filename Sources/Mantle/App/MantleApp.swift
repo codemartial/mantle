@@ -33,5 +33,10 @@ struct MantleApp: App {
         .commands {
             AppCommands(state: state)
         }
+
+        Settings {
+            PreferencesView()
+                .environment(state)
+        }
     }
 }

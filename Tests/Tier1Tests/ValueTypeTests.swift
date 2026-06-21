@@ -100,6 +100,9 @@ final class ValueTypeTests: XCTestCase {
         XCTAssertTrue(AttributeFilter.matches("sun").constrains)
         XCTAssertFalse(AttributeFilter.chips([FilterChip(text: "  ")]).constrains)
         XCTAssertTrue(AttributeFilter.chips([FilterChip(text: "beach")]).constrains)
+        XCTAssertFalse(AttributeFilter.ratings([]).constrains)
+        XCTAssertFalse(AttributeFilter.ratings([0, 6]).constrains)
+        XCTAssertTrue(AttributeFilter.ratings([1, 5]).constrains)
     }
 
     func testLibraryFilterActiveAttributes() {
@@ -108,6 +111,7 @@ final class ValueTypeTests: XCTestCase {
         XCTAssertEqual(f.status(.xmp), .ignore)        // default when unset
 
         f.statuses[.headline] = .matches("x")
+        f.statuses[.rating] = .ratings([])             // present but inert
         f.statuses[.keywords] = .ignore                // present but inert
         XCTAssertTrue(f.isActive)
         XCTAssertEqual(f.activeAttributes, [.headline])

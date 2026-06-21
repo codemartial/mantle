@@ -30,6 +30,10 @@ struct BatchCenter: View {
                         .rotationEffect(.degrees(isMaster ? 0 : Double(offset) * -3))
                         .zIndex(Double(idx))
                 }
+
+                ratingOverlay
+                    .padding(.bottom, 12)
+                    .zIndex(Double(cards.count) + 1)
             }
             .frame(maxWidth: .infinity)
 
@@ -62,6 +66,25 @@ struct BatchCenter: View {
             return "\(n) images selected -- master values prefill the editors below."
         }
         return "\(n) images selected, master is \(masterName) -- its values prefill the editors below."
+    }
+
+    private var ratingOverlay: some View {
+        VStack {
+            Spacer()
+            RatingStars(rating: state.commonBatchRating ?? 0) { newValue in
+                state.applyRatingToAll(newValue)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.45))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .help(state.commonBatchRating == nil ? "Set rating for all selected images" : "Rate all selected images")
+        }
+        .frame(width: 220, height: 220)
     }
 }
 

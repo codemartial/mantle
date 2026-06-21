@@ -91,6 +91,26 @@ final class BatchEditTests: XCTestCase {
         XCTAssertFalse(state.edits.isDirty("/b.jpg"))
     }
 
+    func testApplyRatingToAll() {
+        let state = batch([Fix.record(id: "/a.jpg", rating: 1),
+                           Fix.record(id: "/b.jpg", rating: 0),
+                           Fix.record(id: "/c.jpg", rating: 5)])
+        state.applyRatingToAll(3)
+
+        XCTAssertEqual(state.edits.record("/a.jpg")?.rating, 3)
+        XCTAssertEqual(state.edits.record("/b.jpg")?.rating, 3)
+        XCTAssertEqual(state.edits.record("/c.jpg")?.rating, 3)
+    }
+
+    func testCommonBatchRatingNilWhenMixed() {
+        let state = batch([Fix.record(id: "/a.jpg", rating: 2),
+                           Fix.record(id: "/b.jpg", rating: 2)])
+        XCTAssertEqual(state.commonBatchRating, 2)
+
+        state.updateRating(id: "/b.jpg", to: 4)
+        XCTAssertNil(state.commonBatchRating)
+    }
+
     // MARK: - Keyword broadcasts
 
     func testAddKeywordToAllDedupesCaseInsensitively() {

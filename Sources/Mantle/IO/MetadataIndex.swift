@@ -10,8 +10,8 @@ import Foundation
 import os.log
 
 // Bulk, filter-only metadata reader for the whole library. Used by the
-// headline and keyword filters, which need a title and keyword list for
-// every file -- not just the lazily-ingested selection.
+// headline, rating, and keyword filters, which need metadata for every file
+// -- not just the lazily-ingested selection.
 //
 // Unlike SidecarIO.read (one perl/exiftool spawn per file, plus base64
 // preview extraction), this runs ONE exiftool process over many files at
@@ -27,16 +27,17 @@ import os.log
 
 private let log = Logger(subsystem: "com.tahirhashmi.mantle", category: "metadata-index")
 
-// The title + keyword fields the filters need, read for every file.
+// The fields the filters need, read for every file.
 struct SweptMetadata: Sendable {
     var headline: String
+    var rating: Int
     var keywords: [String]
 }
 
 enum MetadataIndex {
 
-    // The title- and keyword-family tags the sweep requests, matching the
-    // named locations in SidecarIO.resolveHeadline / resolveKeywords.
+    // The title-, rating-, and keyword-family tags the sweep requests,
+    // matching the named locations in SidecarIO's resolve helpers.
     // -struct keeps XMP lang-alt values as { "x-default": "..." } so
     // langDefault can read them.
     private static let tagArgs = [
@@ -46,6 +47,10 @@ enum MetadataIndex {
         "-XMP-iptcExt:Headline",
         "-IPTC:Headline",
         "-IPTC:ObjectName",
+        "-XMP-xmp:Rating",
+        "-XMP:Rating",
+        "-EXIF:Rating",
+        "-IFD0:Rating",
         "-XMP-dc:Subject",
         "-XMP-iptcCore:Keywords",
         "-XMP-lr:HierarchicalSubject",
@@ -56,10 +61,10 @@ enum MetadataIndex {
     // argument vector well under the OS limit on large folders.
     private static let chunkSize = 400
 
-    /// Resolve title + keywords per entry id. A headline of "" means a
-    /// title tag was read and is empty (known-absent); likewise [] for
-    /// keywords. An id absent from the result means the read failed entirely
-    /// (treated as unknown by callers).
+    /// Resolve title + rating + keywords per entry id. A headline of "" means
+    /// a title tag was read and is empty (known-absent); 0 means unrated;
+    /// likewise [] for keywords. An id absent from the result means the read
+    /// failed entirely (treated as unknown by callers).
     static func scan(entries: [LibraryEntry]) -> [String: SweptMetadata] {
         guard !entries.isEmpty,
               let exiftool = ExifToolOneShot.exiftoolBinaryURL(),
@@ -109,7 +114,14 @@ enum MetadataIndex {
                 keywords = SidecarIO.resolveKeywords(from: d)
             }
 
-            result[entry.id] = SweptMetadata(headline: headline, keywords: keywords)
+            var rating = 0
+            if let d = sidecarDict, SidecarIO.hasRating(from: d) {
+                rating = SidecarIO.resolveRating(from: d)
+            } else if let d = imageDict {
+                rating = SidecarIO.resolveRating(from: d)
+            }
+
+            result[entry.id] = SweptMetadata(headline: headline, rating: rating, keywords: keywords)
         }
         return result
     }

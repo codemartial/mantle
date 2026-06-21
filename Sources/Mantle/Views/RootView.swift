@@ -7,9 +7,13 @@
 // <https://polyformproject.org/licenses/noncommercial/1.0.0>.
 
 import SwiftUI
+import AppKit
 
 struct RootView: View {
     @Environment(AppState.self) private var state
+    @State private var ratingKeyMonitor: Any?
+    @State private var pendingBatchRatingValue: Int?
+    @State private var showBatchRatingShortcutPrompt = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +53,72 @@ struct RootView: View {
             }
             return .ignored
         }
+        .onAppear { installRatingKeyMonitor() }
+        .onDisappear { removeRatingKeyMonitor() }
+        .alert("Use number keys for batch ratings?",
+               isPresented: $showBatchRatingShortcutPrompt) {
+            Button("Enable") {
+                state.batchRatingNumberShortcut = .enabled
+                if let value = pendingBatchRatingValue {
+                    state.applyRatingToAll(value)
+                }
+                pendingBatchRatingValue = nil
+            }
+            Button("Disable") {
+                state.batchRatingNumberShortcut = .disabled
+                pendingBatchRatingValue = nil
+            }
+        } message: {
+            Text("Number keys can set ratings for every selected image in batch mode. You can change this later in Preferences.")
+        }
+    }
+
+    private func installRatingKeyMonitor() {
+        guard ratingKeyMonitor == nil else { return }
+        ratingKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handleRatingKey(event) ? nil : event
+        }
+    }
+
+    private func removeRatingKeyMonitor() {
+        if let ratingKeyMonitor {
+            NSEvent.removeMonitor(ratingKeyMonitor)
+            self.ratingKeyMonitor = nil
+        }
+    }
+
+    private func handleRatingKey(_ event: NSEvent) -> Bool {
+        let blockedModifiers: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+        guard event.modifierFlags.intersection(blockedModifiers).isEmpty,
+              let chars = event.charactersIgnoringModifiers,
+              chars.count == 1,
+              let value = Int(chars),
+              (0...5).contains(value),
+              !keyboardFocusIsTextEntry() else {
+            return false
+        }
+
+        if state.batchMode {
+            switch state.batchRatingNumberShortcut {
+            case .enabled:
+                state.applyRatingToAll(value)
+            case .disabled:
+                return false
+            case .unset:
+                pendingBatchRatingValue = value
+                showBatchRatingShortcutPrompt = true
+            }
+        } else if let id = state.selectedID, state.selectedRecord != nil {
+            state.updateRating(id: id, to: value)
+        } else {
+            return false
+        }
+        return true
+    }
+
+    private func keyboardFocusIsTextEntry() -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        return responder is NSTextView || responder is NSTextField
     }
 }
 

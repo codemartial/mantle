@@ -106,6 +106,11 @@ final class AppState {
         didSet { mapStyle.save() }
     }
 
+    var batchRatingNumberShortcut: BatchRatingNumberShortcutPreference =
+        BatchRatingNumberShortcutPreference.load() {
+        didSet { batchRatingNumberShortcut.save() }
+    }
+
     let thumbs = ThumbnailCache()
     let edits = EditStore()
     let undo = UndoStack()
@@ -271,6 +276,17 @@ final class AppState {
     var batchMode: Bool { batchOrder.count >= 2 }
     var masterID: String? { batchOrder.first }
     var masterRecord: ImageRecord? { masterID.flatMap { edits.record($0) } }
+
+    var commonBatchRating: Int? {
+        guard batchMode else { return nil }
+        var common: Int?
+        for id in batchOrder {
+            guard let rating = edits.record(id)?.rating else { continue }
+            if let existing = common, existing != rating { return nil }
+            common = rating
+        }
+        return common
+    }
 
     // Cmd+Click. If no batch yet, seed with [currentSelection, id]. If id
     // is already in the batch, remove it (collapsing to single if only one
@@ -877,6 +893,20 @@ final class AppState {
         updateField(id: id, field: .rating) { $0.rating = clamped }
     }
 
+    func applyRatingToAll(_ value: Int) {
+        let clamped = max(0, min(5, value))
+        let ids = batchOrder
+        guard !ids.isEmpty else { return }
+
+        withUndoGroup(label: "Edit Batch Rating",
+                      labelFor: { "Edit Batch Rating (\(Self.photoCount($0)))" }) {
+            for id in ids {
+                guard edits.record(id) != nil else { continue }
+                updateField(id: id, field: .rating) { $0.rating = clamped }
+            }
+        }
+    }
+
     // Ask the LocationMap to recentre on the selected record's pin. The map
     // observes mapRecenterTick and pans to the current coordinate when it
     // changes. Used by the recentre button and after a coordinate paste.
@@ -932,6 +962,13 @@ final class AppState {
         return sweptMeta[id]?.keywords
     }
 
+    // Same shape as headlineValue, for rating. nil == not yet swept; 0 means
+    // known unrated.
+    func ratingValue(for id: String) -> Int? {
+        if let rec = edits.record(id) { return rec.rating }
+        return sweptMeta[id]?.rating
+    }
+
     // The distinct keyword vocabulary across the whole folder, for filter
     // autocomplete. Union of the swept metadata and any live (session-edited)
     // records, deduped case-insensitively but keeping each keyword's existing
@@ -976,7 +1013,7 @@ final class AppState {
             switch f {
             case .present:    return has
             case .absent:     return !has
-            case .ignore, .matches, .chips: return true  // xmp is binary; no match status
+            case .ignore, .matches, .chips, .ratings: return true  // xmp is binary; no match status
             }
         case .headline:
             guard let value = headlineValue(for: entry.id) else { return nil }
@@ -988,7 +1025,21 @@ final class AppState {
             case .matches(let q):
                 let query = q.trimmingCharacters(in: .whitespacesAndNewlines)
                 return query.isEmpty || trimmed.localizedCaseInsensitiveContains(query)
-            case .chips:         return true   // headline has no chip mode
+            case .chips, .ratings:
+                return true   // headline has no chip / rating mode
+            }
+        case .rating:
+            guard let value = ratingValue(for: entry.id) else { return nil }
+            let rating = max(0, min(5, value))
+            switch f {
+            case .ignore:        return true
+            case .present:       return rating > 0
+            case .absent:        return rating == 0
+            case .ratings(let selected):
+                let valid = Set(selected.filter { (1...5).contains($0) })
+                return valid.isEmpty || valid.contains(rating)
+            case .matches, .chips:
+                return true   // rating has no text / chip mode
             }
         case .keywords:
             guard let kw = keywordsValue(for: entry.id) else { return nil }
@@ -997,6 +1048,7 @@ final class AppState {
             case .present:  return !kw.isEmpty
             case .absent:   return kw.isEmpty
             case .matches:  return true        // keywords use chips, not text
+            case .ratings:  return true        // keywords have no rating mode
             case .chips(let chips):
                 // Exact, case-insensitive. File must carry every include chip
                 // and none of the exclude chips. Blank-text chips are dropped.

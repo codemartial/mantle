@@ -67,6 +67,24 @@ enum SidecarIO {
         )
     }
 
+    // XMP star rating, shared with the bulk metadata sweep. xmp:Rating is the
+    // cross-tool standard; the EXIF Rating tags are Microsoft's variant. -1
+    // (rejected) and out-of-range values clamp into 0...5, with 0 meaning
+    // unrated.
+    static func resolveRating(from json: [String: Any]) -> Int {
+        max(0, min(5, int(json,
+                          "XMP-xmp:Rating",
+                          "XMP:Rating",
+                          "EXIF:Rating",
+                          "IFD0:Rating",
+                          "Rating")))
+    }
+
+    static func hasRating(from json: [String: Any]) -> Bool {
+        ["XMP-xmp:Rating", "XMP:Rating", "EXIF:Rating", "IFD0:Rating", "Rating"]
+            .contains { json[$0] != nil }
+    }
+
     private static func build(json: [String: Any], file: URL, sidecar: URL?) -> ImageRecord {
 
         let headline = resolveHeadline(from: json)
@@ -87,16 +105,7 @@ enum SidecarIO {
 
         let keywords = resolveKeywords(from: json)
 
-        // XMP star rating. xmp:Rating is the cross-tool standard (Lightroom,
-        // Bridge, Photo Mechanic); the EXIF Rating tags are Microsoft's
-        // variant. -1 (rejected) and any out-of-range value clamp into 0...5,
-        // with 0 meaning unrated.
-        let rating = max(0, min(5, int(json,
-                                       "XMP-xmp:Rating",
-                                       "XMP:Rating",
-                                       "EXIF:Rating",
-                                       "IFD0:Rating",
-                                       "Rating")))
+        let rating = resolveRating(from: json)
 
         // Timezone first -- needed to correctly parse offset-less date
         // strings (EXIF dates have no offset baked in; XMP dates do).
